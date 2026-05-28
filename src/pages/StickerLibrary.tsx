@@ -8,16 +8,25 @@ import {
   stickerImageUrl,
   uploadStickerImage,
 } from '../lib/stickerImages'
+import { removeImageBackground } from '../lib/imageProcessing'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { StickerImage } from '../lib/types'
+
+interface Preview {
+  url: string
+  blob: Blob
+}
 
 export function StickerLibrary() {
   const { parent, loading } = useMyParent()
   const toast = useToast()
   const [images, setImages] = useState<StickerImage[]>([])
   const [busy, setBusy] = useState(false)
+  const [processing, setProcessing] = useState(false)
+  const [preview, setPreview] = useState<Preview | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const cameraInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     if (!parent) return
@@ -60,6 +69,51 @@ export function StickerLibrary() {
     }
   }
 
+  // Camera capture → in-browser background removal → preview, before upload.
+  async function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (!file) return
+    setProcessing(true)
+    try {
+      const cutout = await removeImageBackground(file)
+      setPreview({ url: URL.createObjectURL(cutout), blob: cutout })
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  function closePreview() {
+    setPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev.url)
+      return null
+    })
+  }
+
+  async function handleUseSticker() {
+    if (!preview || !parent) return
+    setBusy(true)
+    try {
+      const file = new File([preview.blob], 'photo-sticker.png', {
+        type: 'image/png',
+      })
+      const image = await uploadStickerImage({
+        file,
+        householdId: parent.household_id,
+        label: 'Photo sticker',
+      })
+      setImages((prev) => [image, ...prev])
+      closePreview()
+      toast.success('Sticker added.')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function handleDelete(image: StickerImage) {
     if (!window.confirm('Delete this sticker image?')) return
     try {
@@ -85,16 +139,35 @@ export function StickerLibrary() {
         onChange={(event) => void handleFiles(event)}
         className="hidden"
       />
-      <button
-        type="button"
-        disabled={busy}
-        onClick={() => fileInputRef.current?.click()}
-        className="w-full rounded-[var(--radius-card)] bg-accent px-4 py-3 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
-      >
-        {busy ? 'Uploading…' : 'Upload images'}
-      </button>
+      <input
+        ref={cameraInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        onChange={(event) => void handlePhoto(event)}
+        className="hidden"
+      />
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          disabled={busy || processing}
+          onClick={() => cameraInputRef.current?.click()}
+          className="rounded-[var(--radius-card)] bg-accent px-4 py-3 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
+        >
+          {processing ? 'Removing background…' : 'Take photo'}
+        </button>
+        <button
+          type="button"
+          disabled={busy || processing}
+          onClick={() => fileInputRef.current?.click()}
+          className="rounded-[var(--radius-card)] border border-accent/40 bg-accent/5 px-4 py-3 font-medium text-accent-strong transition-colors hover:border-accent hover:bg-accent/10 disabled:opacity-60"
+        >
+          {busy ? 'Uploading…' : 'Upload images'}
+        </button>
+      </div>
       <p className="mt-2 text-center text-xs text-ink-muted">
-        PNG, JPG, or WebP. Resized to 256px and stored for this household.
+        Take a photo of a sticker (on a contrasting surface) and the background
+        is removed automatically. Or upload PNG, JPG, or WebP.
       </p>
 
       {images.length === 0 ? (
@@ -125,6 +198,61 @@ export function StickerLibrary() {
             </li>
           ))}
         </ul>
+      )}
+
+      {preview && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-6"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm sticker"
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-surface p-5 shadow-2xl">
+            <h2 className="text-center text-lg font-semibold text-ink">
+              Use this sticker?
+            </h2>
+            <p className="mt-1 text-center text-sm text-ink-muted">
+              Background removed. Transparent areas show as a checkerboard.
+            </p>
+            <div className="checkerboard mx-auto mt-4 flex aspect-square w-48 items-center justify-center overflow-hidden rounded-xl border border-black/10">
+              <img
+                src={preview.url}
+                alt="Sticker preview"
+                className="h-full w-full object-contain"
+                draggable={false}
+              />
+            </div>
+            <div className="mt-5 flex gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void handleUseSticker()}
+                className="flex-1 rounded-lg bg-accent px-4 py-2.5 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
+              >
+                {busy ? 'Saving…' : 'Use sticker'}
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => {
+                  closePreview()
+                  cameraInputRef.current?.click()
+                }}
+                className="rounded-lg px-4 py-2.5 font-medium text-ink-muted transition-colors hover:bg-black/5 disabled:opacity-60"
+              >
+                Retake
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={closePreview}
+                className="rounded-lg px-4 py-2.5 font-medium text-ink-muted transition-colors hover:bg-black/5 disabled:opacity-60"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </SetupShell>
   )

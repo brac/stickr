@@ -1,5 +1,14 @@
-import { describe, it, expect } from 'vitest'
-import { processStickerImage } from './imageProcessing'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+// Mock the heavy WASM background-removal lib so tests never load it.
+const { removeBackgroundMock } = vi.hoisted(() => ({
+  removeBackgroundMock: vi.fn(),
+}))
+vi.mock('@imgly/background-removal', () => ({
+  removeBackground: removeBackgroundMock,
+}))
+
+import { processStickerImage, removeImageBackground } from './imageProcessing'
 
 // The resize/encode path relies on createImageBitmap + canvas.toBlob, which
 // jsdom doesn't implement, so these tests pin the input-validation guards that
@@ -30,5 +39,25 @@ describe('processStickerImage validation', () => {
     await expect(processStickerImage(tooBig)).rejects.toThrow(
       'That image is too large (max 15 MB).',
     )
+  })
+})
+
+describe('removeImageBackground', () => {
+  beforeEach(() => removeBackgroundMock.mockReset())
+
+  it('rejects non-image files before loading the model', async () => {
+    await expect(
+      removeImageBackground(fakeFile('application/pdf', 10)),
+    ).rejects.toThrow('Please choose an image file.')
+    expect(removeBackgroundMock).not.toHaveBeenCalled()
+  })
+
+  it('delegates an image file to the background-removal model', async () => {
+    const cutout = new Blob(['x'], { type: 'image/png' })
+    removeBackgroundMock.mockResolvedValue(cutout)
+    const file = fakeFile('image/jpeg', 1000)
+
+    await expect(removeImageBackground(file)).resolves.toBe(cutout)
+    expect(removeBackgroundMock).toHaveBeenCalledWith(file)
   })
 })

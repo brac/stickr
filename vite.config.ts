@@ -18,6 +18,11 @@ export default defineConfig({
         overrideManifestIcons: true,
       },
       workbox: {
+        // The background-removal model ships a ~24MB ONNX Runtime WASM as a
+        // lazy chunk. Keep it out of the precache (the browser HTTP-caches it on
+        // first use); precaching it would bloat the install for a rarely-used
+        // path.
+        globIgnores: ['**/ort-*.wasm', '**/*.onnx'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/.*/i,

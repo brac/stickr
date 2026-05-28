@@ -17,6 +17,7 @@
     "generate-pwa-assets": "pwa-assets-generator"
   },
   "dependencies": {
+    "@imgly/background-removal": "^1.7.0",
     "@supabase/supabase-js": "^2.106.2",
     "canvas-confetti": "^1.9.4",
     "react": "^19.2.6",

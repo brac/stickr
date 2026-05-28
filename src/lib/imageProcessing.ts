@@ -7,6 +7,19 @@ const MAX_INPUT_BYTES = 15 * 1024 * 1024
 const OUTPUT_TYPE = 'image/webp'
 const OUTPUT_QUALITY = 0.9
 
+// Remove a photo's background entirely in-browser, returning a transparent-PNG
+// cutout. The model (~10 MB WASM + weights) is imported lazily so it stays out
+// of the main bundle and only downloads the first time a parent takes a photo
+// (then it's cached by the browser). Feed the result through
+// processStickerImage() to resize + re-encode before upload.
+export async function removeImageBackground(file: File): Promise<Blob> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please choose an image file.')
+  }
+  const { removeBackground } = await import('@imgly/background-removal')
+  return removeBackground(file)
+}
+
 export async function processStickerImage(file: File): Promise<Blob> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Please choose an image file.')
