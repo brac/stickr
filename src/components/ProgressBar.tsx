@@ -34,22 +34,24 @@ export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
         <span className="font-medium text-ink">
           {total} {total === 1 ? 'sticker' : 'stickers'}
         </span>
-        {unlockedCount > 0 ? (
-          <button
-            type="button"
-            onClick={onClaimClick}
-            className="font-semibold text-accent underline-offset-2 hover:underline"
-          >
-            {unlockedCount === 1 ? '1 reward ready' : `${unlockedCount} rewards ready`} →
-          </button>
-        ) : (
+        {nextTier ? (
           <span className="text-ink-muted">
-            {nextTier
-              ? `${nextTier.threshold - total} to go · ${nextTier.name}`
-              : 'All tiers reached'}
+            {nextTier.threshold - total} to go · {nextTier.name}
           </span>
-        )}
+        ) : tiers.length > 0 ? (
+          <span className="text-ink-muted">All tiers reached</span>
+        ) : null}
       </div>
+
+      {unlockedCount > 0 && (
+        <button
+          type="button"
+          onClick={onClaimClick}
+          className="mt-3 w-full rounded-xl bg-accent py-3 font-semibold text-white shadow-sm transition-opacity active:opacity-80"
+        >
+          🎉 {unlockedCount === 1 ? '1 reward ready' : `${unlockedCount} rewards ready`} — Claim
+        </button>
+      )}
     </div>
   )
 }
