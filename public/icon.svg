@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="Stickr">
+  <!-- Maskable + splash source. Flat background (matches the splash fill and
+       theme color) so when the generator centers this on the splash canvas
+       there is no visible square seam — only the disc and star float. -->
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffd75e" />
+      <stop offset="100%" stop-color="#f3b125" />
+    </linearGradient>
+    <filter id="softShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="10" result="blur" />
+      <feOffset in="blur" dy="8" result="off" />
+      <feComponentTransfer in="off" result="sh">
+        <feFuncA type="linear" slope="0.22" />
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode in="sh" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" fill="#1f7a5a" />
+
+  <g filter="url(#softShadow)">
+    <circle cx="256" cy="256" r="150" fill="#ffffff" />
+    <g transform="translate(256 256) scale(3.6) translate(-32 -32)">
+      <path
+        d="M32 4 L39.6 24.8 L61.6 25.6 L43.8 38.6 L50.4 60 L32 47.2 L13.6 60 L20.2 38.6 L2.4 25.6 L24.4 24.8 Z"
+        fill="url(#gold)"
+        stroke="#ffffff"
+        stroke-width="1.5"
+        stroke-linejoin="round"
+      />
+    </g>
+  </g>
+</svg>

@@ -299,6 +299,7 @@ export type Database = {
           created_at: string
           id: string
           kid_id: string
+          label: string | null
           position_x: number
           position_y: number
           rotation: number
@@ -312,6 +313,7 @@ export type Database = {
           created_at?: string
           id?: string
           kid_id: string
+          label?: string | null
           position_x?: number
           position_y?: number
           rotation?: number
@@ -325,6 +327,7 @@ export type Database = {
           created_at?: string
           id?: string
           kid_id?: string
+          label?: string | null
           position_x?: number
           position_y?: number
           rotation?: number

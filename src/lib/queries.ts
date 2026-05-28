@@ -66,7 +66,31 @@ export interface NewSticker {
   chapterId: string
   parentId: string
   stickerImageId: string | null
+  // Set for custom (ad-hoc) awards that have no chore; null for chore awards,
+  // which read their name from the chore.
+  label: string | null
+  // Captured at award time so offline awards keep their earned time once synced.
+  createdAt: string
   position: StickerPosition
+}
+
+// Build the in-memory event row for a pending award — used for the optimistic
+// board, the offline-queue merge on reload, and the Today strip.
+export function newStickerToEvent(sticker: NewSticker): StickerEvent {
+  return {
+    id: sticker.id,
+    kid_id: sticker.kidId,
+    chore_id: sticker.choreId,
+    chapter_id: sticker.chapterId,
+    sticker_image_id: sticker.stickerImageId,
+    awarded_by: sticker.parentId,
+    amount: 1,
+    label: sticker.label,
+    position_x: sticker.position.x,
+    position_y: sticker.position.y,
+    rotation: sticker.position.rotation,
+    created_at: sticker.createdAt,
+  }
 }
 
 // One sticker_event = one sticker (amount=1). A +N chore awards N at once,
@@ -80,7 +104,9 @@ export async function awardStickers(stickers: NewSticker[]): Promise<void> {
     chapter_id: sticker.chapterId,
     awarded_by: sticker.parentId,
     sticker_image_id: sticker.stickerImageId,
+    label: sticker.label,
     amount: 1,
+    created_at: sticker.createdAt,
     position_x: sticker.position.x,
     position_y: sticker.position.y,
     rotation: sticker.position.rotation,

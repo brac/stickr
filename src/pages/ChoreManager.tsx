@@ -11,6 +11,7 @@ import {
 } from '../lib/chores'
 import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
 import { getErrorMessage } from '../lib/errors'
+import { useToast } from '../components/toast/useToast'
 import type { Chore, StickerImage } from '../lib/types'
 
 interface FormState {
@@ -24,11 +25,11 @@ const VALUES = [1, 2, 3]
 
 export function ChoreManager() {
   const { parent, loading } = useMyParent()
+  const toast = useToast()
   const [chores, setChores] = useState<Chore[]>([])
   const [images, setImages] = useState<StickerImage[]>([])
   const [form, setForm] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const householdId = parent?.household_id
 
@@ -42,12 +43,12 @@ export function ChoreManager() {
         setImages(imageRows)
       })
       .catch((err) => {
-        if (active) setError(getErrorMessage(err))
+        if (active) toast.error(getErrorMessage(err))
       })
     return () => {
       active = false
     }
-  }, [householdId])
+  }, [householdId, toast])
 
   const imageUrls = useMemo(() => {
     const map: Record<string, string> = {}
@@ -65,39 +66,39 @@ export function ChoreManager() {
   async function handleSubmit(event: FormEvent) {
     event.preventDefault()
     if (!form || !householdId) return
+    const isNew = form.id === null
     setSaving(true)
-    setError(null)
     try {
       const input = {
         name: form.name,
         stickerValue: form.stickerValue,
         stickerImageId: form.stickerImageId,
-        sortOrder:
-          form.id === null
-            ? chores.reduce((max, c) => Math.max(max, c.sort_order), -1) + 1
-            : (chores.find((c) => c.id === form.id)?.sort_order ?? 0),
+        sortOrder: isNew
+          ? chores.reduce((max, c) => Math.max(max, c.sort_order), -1) + 1
+          : (chores.find((c) => c.id === form.id)?.sort_order ?? 0),
       }
-      if (form.id === null) {
+      if (isNew) {
         await createChore(householdId, input)
       } else {
-        await updateChore(form.id, input)
+        await updateChore(form.id as string, input)
       }
       await reloadChores()
       setForm(null)
+      toast.success(isNew ? 'Chore added.' : 'Chore updated.')
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
     }
   }
 
   async function handleToggleActive(chore: Chore) {
-    setError(null)
     try {
       await setChoreActive(chore.id, !chore.active)
       await reloadChores()
+      toast.success(chore.active ? 'Chore deactivated.' : 'Chore activated.')
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     }
   }
 
@@ -107,12 +108,6 @@ export function ChoreManager() {
 
   return (
     <SetupShell title="Chores" backTo="/setup">
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
-        </p>
-      )}
-
       {form ? (
         <ChoreForm
           form={form}

@@ -5,6 +5,7 @@ import { useMyParent } from '../hooks/useMyParent'
 import { fetchRewardTiers } from '../lib/queries'
 import { createRewardTier, deleteRewardTier, updateRewardTier } from '../lib/rewards'
 import { getErrorMessage } from '../lib/errors'
+import { useToast } from '../components/toast/useToast'
 import type { RewardTier } from '../lib/types'
 
 interface FormState {
@@ -15,10 +16,10 @@ interface FormState {
 
 export function RewardManager() {
   const { parent, loading } = useMyParent()
+  const toast = useToast()
   const [tiers, setTiers] = useState<RewardTier[]>([])
   const [form, setForm] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const householdId = parent?.household_id
 
@@ -30,12 +31,12 @@ export function RewardManager() {
         if (active) setTiers(rows)
       })
       .catch((err) => {
-        if (active) setError(getErrorMessage(err))
+        if (active) toast.error(getErrorMessage(err))
       })
     return () => {
       active = false
     }
-  }, [householdId])
+  }, [householdId, toast])
 
   async function reload() {
     if (!householdId) return
@@ -47,22 +48,23 @@ export function RewardManager() {
     if (!form || !householdId) return
     const threshold = Number(form.threshold)
     if (!Number.isInteger(threshold) || threshold < 1) {
-      setError('Threshold must be a whole number of 1 or more.')
+      toast.error('Threshold must be a whole number of 1 or more.')
       return
     }
+    const isNew = form.id === null
     setSaving(true)
-    setError(null)
     try {
       const input = { name: form.name, threshold }
-      if (form.id === null) {
+      if (isNew) {
         await createRewardTier(householdId, input)
       } else {
-        await updateRewardTier(form.id, input)
+        await updateRewardTier(form.id as string, input)
       }
       await reload()
       setForm(null)
+      toast.success(isNew ? 'Reward added.' : 'Reward updated.')
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     } finally {
       setSaving(false)
     }
@@ -70,12 +72,12 @@ export function RewardManager() {
 
   async function handleDelete(tier: RewardTier) {
     if (!window.confirm(`Delete the "${tier.name}" reward?`)) return
-    setError(null)
     try {
       await deleteRewardTier(tier.id)
       await reload()
+      toast.success('Reward deleted.')
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     }
   }
 
@@ -85,12 +87,6 @@ export function RewardManager() {
 
   return (
     <SetupShell title="Rewards" backTo="/setup">
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
-        </p>
-      )}
-
       {form ? (
         <form
           onSubmit={handleSubmit}

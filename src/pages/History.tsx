@@ -8,6 +8,7 @@ import {
 } from '../lib/queries'
 import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
 import { getErrorMessage } from '../lib/errors'
+import { useToast } from '../components/toast/useToast'
 import type { StickerEvent } from '../lib/types'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { ChapterSnapshot } from '../components/ChapterSnapshot'
@@ -113,10 +114,10 @@ function ChapterCard({ chapter, imageUrls }: ChapterCardProps) {
 }
 
 export function History() {
+  const toast = useToast()
   const [chapters, setChapters] = useState<PastChapter[]>([])
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -138,7 +139,7 @@ export function History() {
         const past = await fetchPastChapters(kid.id)
         if (active) setChapters(past)
       } catch (err) {
-        if (active) setError(getErrorMessage(err))
+        if (active) toast.error(getErrorMessage(err))
       } finally {
         if (active) setLoading(false)
       }
@@ -146,7 +147,7 @@ export function History() {
     return () => {
       active = false
     }
-  }, [])
+  }, [toast])
 
   if (loading) {
     return <FullScreenSpinner />
@@ -154,13 +155,7 @@ export function History() {
 
   return (
     <SetupShell title="History" backTo="/">
-      {error && (
-        <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
-        </p>
-      )}
-
-      {chapters.length === 0 && !error ? (
+      {chapters.length === 0 ? (
         <div className="mt-12 text-center">
           <p className="font-medium text-ink">No completed chapters yet</p>
           <p className="mt-1 text-sm text-ink-muted">

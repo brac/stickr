@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
@@ -10,6 +10,7 @@ import {
   fetchKid,
   fetchMyParent,
   fetchRewardTiers,
+  newStickerToEvent,
   redeemChapter,
   removeStickerEvent,
   type NewSticker,
@@ -18,7 +19,14 @@ import { fetchActiveChores } from '../lib/chores'
 import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
 import { computeStickerPosition } from '../lib/stickerPlacement'
 import { useBoardLayout } from '../hooks/useBoardLayout'
+import { useOnlineStatus } from '../hooks/useOnlineStatus'
+import {
+  enqueueAwards,
+  getQueuedAwards,
+  removeQueuedAwards,
+} from '../lib/offlineQueue'
 import { getErrorMessage } from '../lib/errors'
+import { useToast } from '../components/toast/useToast'
 import type {
   Chore,
   Household,
@@ -33,12 +41,29 @@ import { StickerBoard } from '../components/StickerBoard'
 import { ProgressBar } from '../components/ProgressBar'
 import { BoardMenu } from '../components/BoardMenu'
 import { RedemptionSheet } from '../components/RedemptionSheet'
+import {
+  CustomAwardModal,
+  type CustomAwardInput,
+} from '../components/CustomAwardModal'
+import { TodayLog } from '../components/TodayLog'
+
+interface AwardParams {
+  choreId: string | null
+  stickerImageId: string | null
+  label: string | null
+  count: number
+}
+
+function pluralStickers(count: number): string {
+  return `${count} ${count === 1 ? 'sticker' : 'stickers'}`
+}
 
 export function Home() {
   const { signOut } = useAuth()
   const navigate = useNavigate()
+  const toast = useToast()
+  const online = useOnlineStatus()
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [parent, setParent] = useState<Parent | null>(null)
   const [household, setHousehold] = useState<Household | null>(null)
   const [kid, setKid] = useState<Kid | null>(null)
@@ -48,8 +73,10 @@ export function Home() {
   const [stickerImages, setStickerImages] = useState<StickerImage[]>([])
   const [awardingId, setAwardingId] = useState<string | null>(null)
   const [showRedemption, setShowRedemption] = useState(false)
+  const [showCustom, setShowCustom] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
   const { ref: boardRef, layout } = useBoardLayout()
+  const flushingRef = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -78,7 +105,7 @@ export function Home() {
         // Events load in the chapter-keyed effect below, so they reload
         // automatically when a redemption switches to a fresh chapter.
       } catch (err) {
-        if (active) setError(getErrorMessage(err))
+        if (active) toast.error(getErrorMessage(err))
       } finally {
         if (active) setLoading(false)
       }
@@ -86,7 +113,7 @@ export function Home() {
     return () => {
       active = false
     }
-  }, [])
+  }, [toast])
 
   // Load + live-sync the current chapter's stickers. Keyed on chapterId so a
   // redemption (which moves the kid to a fresh chapter) reloads the board.
@@ -96,10 +123,16 @@ export function Home() {
     let active = true
     fetchChapterEvents(chapterId)
       .then((rows) => {
-        if (active) setEvents(rows)
+        if (!active) return
+        // Re-show any awards queued offline for this chapter (survives reload).
+        const existing = new Set(rows.map((row) => row.id))
+        const queued = getQueuedAwards()
+          .filter((q) => q.chapterId === chapterId && !existing.has(q.id))
+          .map(newStickerToEvent)
+        setEvents([...rows, ...queued])
       })
       .catch((err) => {
-        if (active) setError(getErrorMessage(err))
+        if (active) toast.error(getErrorMessage(err))
       })
     const channel = supabase
       .channel(`chapter-events-${chapterId}`)
@@ -137,7 +170,7 @@ export function Home() {
       active = false
       supabase.removeChannel(channel)
     }
-  }, [chapterId])
+  }, [chapterId, toast])
 
   // Realtime: watch the kid row so a redemption on either device (which changes
   // current_chapter_id) propagates here — the chapter-keyed effect then reloads
@@ -186,68 +219,132 @@ export function Home() {
     return map
   }, [stickerImages])
 
-  const handleAward = useCallback(
-    async (chore: Chore) => {
-      if (!parent || !kid || !kid.current_chapter_id) return
-      const chapterId = kid.current_chapter_id
+  // chore_id -> name, for the Today strip.
+  const choreNames = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const chore of chores) map[chore.id] = chore.name
+    return map
+  }, [chores])
+
+  // Holds the latest submitAward so the retry action can call it without the
+  // callback referencing itself (which breaks memoization).
+  const submitAwardRef = useRef<((params: AwardParams) => void) | null>(null)
+
+  // Shared award path for both chore taps and custom awards. Optimistically
+  // drops stickers, then persists. On failure: queue if offline (keep the
+  // stickers), otherwise roll back and offer a retry.
+  const submitAward = useCallback(
+    async (params: AwardParams) => {
+      if (!parent || !kid?.current_chapter_id) return
+      const awardChapterId = kid.current_chapter_id
       const baseIndex = events.length
-      // A +N chore drops N stickers, each its own event and position.
+      const now = new Date().toISOString()
       const newStickers: NewSticker[] = []
-      const optimistic: StickerEvent[] = []
-      for (let i = 0; i < chore.sticker_value; i++) {
+      for (let i = 0; i < params.count; i++) {
         const id = crypto.randomUUID()
-        const position = computeStickerPosition(id, baseIndex + i, layout)
         newStickers.push({
           id,
           kidId: kid.id,
-          choreId: chore.id,
-          chapterId,
+          choreId: params.choreId,
+          chapterId: awardChapterId,
           parentId: parent.id,
-          stickerImageId: chore.sticker_image_id,
-          position,
-        })
-        optimistic.push({
-          id,
-          kid_id: kid.id,
-          chore_id: chore.id,
-          chapter_id: chapterId,
-          sticker_image_id: chore.sticker_image_id,
-          awarded_by: parent.id,
-          amount: 1,
-          position_x: position.x,
-          position_y: position.y,
-          rotation: position.rotation,
-          created_at: new Date().toISOString(),
+          stickerImageId: params.stickerImageId,
+          label: params.label,
+          createdAt: now,
+          position: computeStickerPosition(id, baseIndex + i, layout),
         })
       }
+      const optimistic = newStickers.map(newStickerToEvent)
       const newIds = new Set(newStickers.map((sticker) => sticker.id))
       setEvents((prev) => [...prev, ...optimistic])
-      setAwardingId(chore.id)
-      setError(null)
       try {
         await awardStickers(newStickers)
       } catch (err) {
-        setEvents((prev) => prev.filter((event) => !newIds.has(event.id)))
-        setError(getErrorMessage(err))
+        if (!navigator.onLine) {
+          enqueueAwards(newStickers)
+          toast.info(
+            `Offline — ${pluralStickers(params.count)} queued, will sync when you reconnect.`,
+          )
+        } else {
+          setEvents((prev) => prev.filter((event) => !newIds.has(event.id)))
+          toast.error(getErrorMessage(err), {
+            action: {
+              label: 'Retry',
+              onClick: () => submitAwardRef.current?.(params),
+            },
+          })
+        }
+      }
+    },
+    [parent, kid, events.length, layout, toast],
+  )
+
+  useEffect(() => {
+    submitAwardRef.current = submitAward
+  }, [submitAward])
+
+  const handleAward = useCallback(
+    async (chore: Chore) => {
+      setAwardingId(chore.id)
+      try {
+        await submitAward({
+          choreId: chore.id,
+          stickerImageId: chore.sticker_image_id,
+          label: null,
+          count: chore.sticker_value,
+        })
       } finally {
         setAwardingId(null)
       }
     },
-    [parent, kid, events.length, layout],
+    [submitAward],
   )
+
+  const handleCustomAward = useCallback(
+    async (input: CustomAwardInput) => {
+      await submitAward({
+        choreId: null,
+        stickerImageId: input.stickerImageId,
+        label: input.label,
+        count: input.value,
+      })
+      setShowCustom(false)
+    },
+    [submitAward],
+  )
+
+  // Flush queued offline awards when connectivity returns (and on mount).
+  const flushQueue = useCallback(async () => {
+    if (flushingRef.current) return
+    const queued = getQueuedAwards()
+    if (queued.length === 0) return
+    flushingRef.current = true
+    try {
+      await awardStickers(queued)
+      removeQueuedAwards(new Set(queued.map((sticker) => sticker.id)))
+      toast.success(`Synced ${pluralStickers(queued.length)}.`)
+    } catch {
+      // Still unreachable; leave queued for the next reconnect.
+    } finally {
+      flushingRef.current = false
+    }
+  }, [toast])
+
+  useEffect(() => {
+    if (online) void flushQueue()
+  }, [online, flushQueue])
 
   const handleUndoLast = useCallback(async () => {
     const last = events[events.length - 1]
     if (!last) return
     setEvents((prev) => prev.filter((event) => event.id !== last.id))
-    setError(null)
     try {
       await removeStickerEvent(last.id)
     } catch (err) {
       setEvents((prev) => [...prev, last])
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     }
-  }, [events])
+  }, [events, toast])
 
   const handleResetBoard = useCallback(async () => {
     if (!kid?.current_chapter_id) return
@@ -258,19 +355,17 @@ export function Home() {
     const chapterToClear = kid.current_chapter_id
     const previous = events
     setEvents([])
-    setError(null)
     try {
       await clearChapterStickers(chapterToClear)
     } catch (err) {
       setEvents(previous)
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     }
-  }, [kid, events])
+  }, [kid, events, toast])
 
   const handleRedeem = useCallback(
     async (tier: RewardTier) => {
       if (!parent || !kid || !kid.current_chapter_id) return
-      setError(null)
       try {
         const newChapterId = await redeemChapter({
           kidId: kid.id,
@@ -291,11 +386,12 @@ export function Home() {
             : prev,
         )
         setShowRedemption(false)
+        toast.success(`"${tier.name}" claimed! Fresh board started.`)
       } catch (err) {
-        setError(getErrorMessage(err))
+        toast.error(getErrorMessage(err))
       }
     },
-    [parent, kid, total, events],
+    [parent, kid, total, events, toast],
   )
 
   if (loading) {
@@ -329,6 +425,12 @@ export function Home() {
         />
       </header>
 
+      {!online && (
+        <p className="rounded-lg bg-amber-100 px-3 py-2 text-center text-sm text-amber-800">
+          Offline — stickers are saved and will sync when you reconnect.
+        </p>
+      )}
+
       <section className="mt-1">
         <p className="text-center text-sm uppercase tracking-[0.2em] text-ink-muted">
           {kid?.name}'s board
@@ -343,11 +445,7 @@ export function Home() {
         />
       </section>
 
-      {error && (
-        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-center text-sm text-red-600">
-          {error}
-        </p>
-      )}
+      <TodayLog events={events} choreNames={choreNames} imageUrls={imageUrls} />
 
       <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {chores.map((chore) => {
@@ -377,16 +475,29 @@ export function Home() {
             </button>
           )
         })}
-        {chores.length === 0 && (
-          <button
-            type="button"
-            onClick={() => navigate('/setup/chores')}
-            className="col-span-full rounded-[var(--radius-card)] border-2 border-dashed border-black/15 px-4 py-6 text-sm text-ink-muted transition-colors hover:border-accent/50 hover:text-ink"
-          >
-            No chores yet — tap to add one
-          </button>
-        )}
+
+        <button
+          type="button"
+          disabled={awardingId !== null}
+          onClick={() => setShowCustom(true)}
+          className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 border-dashed border-accent/40 px-4 py-5 font-medium text-accent transition-[transform,colors] hover:border-accent hover:bg-accent/5 active:scale-95 disabled:opacity-60"
+        >
+          <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent/10 text-2xl leading-none">
+            +
+          </span>
+          <span className="text-base">Custom</span>
+        </button>
       </section>
+
+      {chores.length === 0 && (
+        <button
+          type="button"
+          onClick={() => navigate('/setup/chores')}
+          className="mt-3 rounded-[var(--radius-card)] border-2 border-dashed border-black/15 px-4 py-4 text-sm text-ink-muted transition-colors hover:border-accent/50 hover:text-ink"
+        >
+          No chores yet — tap to add one
+        </button>
+      )}
 
       {showRedemption && (
         <RedemptionSheet
@@ -394,6 +505,15 @@ export function Home() {
           total={total}
           onRedeem={handleRedeem}
           onClose={() => setShowRedemption(false)}
+        />
+      )}
+
+      {showCustom && (
+        <CustomAwardModal
+          stickerImages={stickerImages}
+          imageUrls={imageUrls}
+          onAward={handleCustomAward}
+          onClose={() => setShowCustom(false)}
         />
       )}
     </div>

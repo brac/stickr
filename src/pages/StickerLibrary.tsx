@@ -9,13 +9,14 @@ import {
   uploadStickerImage,
 } from '../lib/stickerImages'
 import { getErrorMessage } from '../lib/errors'
+import { useToast } from '../components/toast/useToast'
 import type { StickerImage } from '../lib/types'
 
 export function StickerLibrary() {
   const { parent, loading } = useMyParent()
+  const toast = useToast()
   const [images, setImages] = useState<StickerImage[]>([])
   const [busy, setBusy] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -26,19 +27,19 @@ export function StickerLibrary() {
         if (active) setImages(rows)
       })
       .catch((err) => {
-        if (active) setError(getErrorMessage(err))
+        if (active) toast.error(getErrorMessage(err))
       })
     return () => {
       active = false
     }
-  }, [parent])
+  }, [parent, toast])
 
   async function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     const files = event.target.files
     if (!files || !parent) return
     setBusy(true)
-    setError(null)
     try {
+      let count = 0
       for (const file of Array.from(files)) {
         const image = await uploadStickerImage({
           file,
@@ -46,9 +47,13 @@ export function StickerLibrary() {
           label: file.name.replace(/\.[^.]+$/, ''),
         })
         setImages((prev) => [image, ...prev])
+        count++
+      }
+      if (count > 0) {
+        toast.success(`${count} image${count === 1 ? '' : 's'} uploaded.`)
       }
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     } finally {
       setBusy(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
@@ -57,12 +62,12 @@ export function StickerLibrary() {
 
   async function handleDelete(image: StickerImage) {
     if (!window.confirm('Delete this sticker image?')) return
-    setError(null)
     try {
       await deleteStickerImage(image)
       setImages((prev) => prev.filter((i) => i.id !== image.id))
+      toast.success('Sticker image deleted.')
     } catch (err) {
-      setError(getErrorMessage(err))
+      toast.error(getErrorMessage(err))
     }
   }
 
@@ -91,12 +96,6 @@ export function StickerLibrary() {
       <p className="mt-2 text-center text-xs text-ink-muted">
         PNG, JPG, or WebP. Resized to 256px and stored for this household.
       </p>
-
-      {error && (
-        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
-          {error}
-        </p>
-      )}
 
       {images.length === 0 ? (
         <p className="mt-10 text-center text-sm text-ink-muted">

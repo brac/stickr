@@ -10,7 +10,13 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg'],
+      includeAssets: ['icon.svg'],
+      // Generate the icon set + iOS splash screens from pwa-assets.config.ts,
+      // inject the <link> tags, and overwrite the manifest icons below.
+      pwaAssets: {
+        config: true,
+        overrideManifestIcons: true,
+      },
       workbox: {
         runtimeCaching: [
           {
@@ -31,18 +37,11 @@ export default defineConfig({
         short_name: 'Stickr',
         description: 'Household sticker reward board',
         theme_color: '#1f7a5a',
-        background_color: '#faf7f0',
+        background_color: '#1f7a5a',
         display: 'standalone',
         orientation: 'portrait',
         start_url: '/',
-        icons: [
-          {
-            src: 'favicon.svg',
-            sizes: 'any',
-            type: 'image/svg+xml',
-            purpose: 'any maskable',
-          },
-        ],
+        // icons are generated and injected by pwaAssets (overrideManifestIcons).
       },
     }),
   ],
