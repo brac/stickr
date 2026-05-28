@@ -1,18 +1,25 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
 import {
   awardSticker,
+  clearChapterStickers,
   fetchActiveChores,
+  fetchChapterEvents,
   fetchHousehold,
   fetchKid,
-  fetchKidBalance,
   fetchMyParent,
+  removeStickerEvent,
 } from '../lib/queries'
+import { computeStickerPosition } from '../lib/stickerPlacement'
+import { useBoardLayout } from '../hooks/useBoardLayout'
 import { getErrorMessage } from '../lib/errors'
-import type { Chore, Household, Kid, Parent } from '../lib/types'
+import type { Chore, Household, Kid, Parent, StickerEvent } from '../lib/types'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
+import { StickerBoard } from '../components/StickerBoard'
+import { ProgressBar } from '../components/ProgressBar'
+import { BoardMenu } from '../components/BoardMenu'
 
 export function Home() {
   const { signOut } = useAuth()
@@ -22,9 +29,10 @@ export function Home() {
   const [household, setHousehold] = useState<Household | null>(null)
   const [kid, setKid] = useState<Kid | null>(null)
   const [chores, setChores] = useState<Chore[]>([])
-  const [balance, setBalance] = useState(0)
+  const [events, setEvents] = useState<StickerEvent[]>([])
   const [awardingId, setAwardingId] = useState<string | null>(null)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
+  const { ref: boardRef, layout } = useBoardLayout()
 
   useEffect(() => {
     let active = true
@@ -46,7 +54,11 @@ export function Home() {
         setHousehold(hh)
         setKid(theKid)
         setChores(activeChores)
-        setBalance(theKid?.current_balance ?? 0)
+        if (theKid?.current_chapter_id) {
+          const chapterEvents = await fetchChapterEvents(theKid.current_chapter_id)
+          if (!active) return
+          setEvents(chapterEvents)
+        }
       } catch (err) {
         if (active) setError(getErrorMessage(err))
       } finally {
@@ -58,49 +70,122 @@ export function Home() {
     }
   }, [])
 
-  // Realtime: keep the count in sync with the partner's phone.
-  const kidId = kid?.id
+  // Realtime: append new stickers from the partner's phone as they land.
+  const chapterId = kid?.current_chapter_id ?? null
   useEffect(() => {
-    if (!kidId) return
+    if (!chapterId) return
     const channel = supabase
-      .channel(`kid-balance-${kidId}`)
+      .channel(`chapter-events-${chapterId}`)
       .on(
         'postgres_changes',
-        { event: 'UPDATE', schema: 'public', table: 'kid', filter: `id=eq.${kidId}` },
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'sticker_event',
+          filter: `chapter_id=eq.${chapterId}`,
+        },
         (payload) => {
-          const next = payload.new as Kid
-          setBalance(next.current_balance)
+          const incoming = payload.new as StickerEvent
+          setEvents((prev) =>
+            prev.some((e) => e.id === incoming.id) ? prev : [...prev, incoming],
+          )
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'sticker_event',
+          filter: `chapter_id=eq.${chapterId}`,
+        },
+        (payload) => {
+          const removed = payload.old as { id?: string }
+          if (!removed.id) return
+          setEvents((prev) => prev.filter((e) => e.id !== removed.id))
         },
       )
       .subscribe()
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [kidId])
+  }, [chapterId])
+
+  const total = useMemo(
+    () => events.reduce((sum, event) => sum + event.amount, 0),
+    [events],
+  )
 
   const handleAward = useCallback(
     async (chore: Chore) => {
-      if (!kid || !parent || !kid.current_chapter_id) return
+      if (!parent || !kid || !kid.current_chapter_id) return
+      const id = crypto.randomUUID()
+      const position = computeStickerPosition(id, events.length, layout)
+      const optimistic: StickerEvent = {
+        id,
+        kid_id: kid.id,
+        chore_id: chore.id,
+        chapter_id: kid.current_chapter_id,
+        sticker_image_id: null,
+        awarded_by: parent.id,
+        amount: 1,
+        position_x: position.x,
+        position_y: position.y,
+        rotation: position.rotation,
+        created_at: new Date().toISOString(),
+      }
+      setEvents((prev) => [...prev, optimistic])
       setAwardingId(chore.id)
       setError(null)
       try {
         await awardSticker({
+          id,
           kidId: kid.id,
           choreId: chore.id,
           chapterId: kid.current_chapter_id,
           parentId: parent.id,
-          amount: chore.sticker_value,
+          position,
         })
-        // Instant feedback on this device; realtime keeps the partner in sync.
-        setBalance(await fetchKidBalance(kid.id))
       } catch (err) {
+        setEvents((prev) => prev.filter((event) => event.id !== id))
         setError(getErrorMessage(err))
       } finally {
         setAwardingId(null)
       }
     },
-    [kid, parent],
+    [parent, kid, events.length, layout],
   )
+
+  const handleUndoLast = useCallback(async () => {
+    const last = events[events.length - 1]
+    if (!last) return
+    setEvents((prev) => prev.filter((event) => event.id !== last.id))
+    setError(null)
+    try {
+      await removeStickerEvent(last.id)
+    } catch (err) {
+      setEvents((prev) => [...prev, last])
+      setError(getErrorMessage(err))
+    }
+  }, [events])
+
+  const handleResetBoard = useCallback(async () => {
+    if (!kid?.current_chapter_id) return
+    const confirmed = window.confirm(
+      'Remove all stickers from the board? This cannot be undone.',
+    )
+    if (!confirmed) return
+    const chapterToClear = kid.current_chapter_id
+    const previous = events
+    setEvents([])
+    setError(null)
+    try {
+      await clearChapterStickers(chapterToClear)
+    } catch (err) {
+      setEvents(previous)
+      setError(getErrorMessage(err))
+    }
+  }, [kid, events])
 
   if (loading) {
     return <FullScreenSpinner />
@@ -110,48 +195,51 @@ export function Home() {
   }
 
   return (
-    <div className="mx-auto flex min-h-full w-full max-w-md flex-col px-5 pb-8">
+    <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 pb-8 sm:px-8 lg:px-12">
       <header className="flex items-center justify-between py-4">
         <div>
           <p className="text-sm font-medium text-ink-muted">{household?.name}</p>
           {household && (
             <p className="text-xs text-ink-muted">
               Invite code:{' '}
-              <span className="font-mono tracking-widest text-ink">{household.join_code}</span>
+              <span className="font-mono tracking-widest text-ink">
+                {household.join_code}
+              </span>
             </p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void signOut()}
-          className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-black/5"
-        >
-          Sign out
-        </button>
+        <BoardMenu
+          undoDisabled={events.length === 0}
+          onUndoLast={() => void handleUndoLast()}
+          onResetBoard={() => void handleResetBoard()}
+          onSignOut={() => void signOut()}
+        />
       </header>
 
-      <section className="flex flex-1 flex-col items-center justify-center text-center">
-        <p className="text-lg font-medium text-ink-muted">{kid?.name}</p>
-        <p className="mt-1 text-[7rem] font-bold leading-none tracking-tight text-ink tabular-nums">
-          {balance}
+      <section className="mt-1">
+        <p className="text-center text-sm uppercase tracking-[0.2em] text-ink-muted">
+          {kid?.name}'s board
         </p>
-        <p className="text-sm uppercase tracking-[0.2em] text-ink-muted">stickers</p>
+        <div ref={boardRef} className="mt-3 w-full">
+          <StickerBoard events={events} layout={layout} />
+        </div>
+        <ProgressBar total={total} />
       </section>
 
       {error && (
-        <p className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-center text-sm text-red-600">
+        <p className="mt-4 rounded-lg bg-red-50 px-3 py-2 text-center text-sm text-red-600">
           {error}
         </p>
       )}
 
-      <section className="grid grid-cols-2 gap-3">
+      <section className="mt-6 grid grid-cols-2 gap-3">
         {chores.map((chore) => (
           <button
             key={chore.id}
             type="button"
             disabled={awardingId !== null}
             onClick={() => void handleAward(chore)}
-            className="flex flex-col items-center gap-1 rounded-[var(--radius-card)] bg-accent px-4 py-6 font-medium text-white shadow-sm transition-transform active:scale-95 disabled:opacity-60"
+            className="flex flex-col items-center gap-1 rounded-[var(--radius-card)] bg-accent px-4 py-5 font-medium text-white shadow-sm transition-transform active:scale-95 disabled:opacity-60"
           >
             <span className="text-base">{chore.name}</span>
             <span className="text-sm text-white/80">+{chore.sticker_value}</span>

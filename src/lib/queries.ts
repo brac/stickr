@@ -1,5 +1,6 @@
 import { supabase } from './supabase'
-import type { Chore, Household, Kid, Parent } from './types'
+import type { Chore, Household, Kid, Parent, StickerEvent } from './types'
+import type { StickerPosition } from './stickerPlacement'
 
 export async function fetchMyParent(): Promise<Parent | null> {
   const {
@@ -59,34 +60,57 @@ export async function fetchActiveChores(householdId: string): Promise<Chore[]> {
   return data ?? []
 }
 
-export async function fetchKidBalance(kidId: string): Promise<number> {
+export async function fetchChapterEvents(chapterId: string): Promise<StickerEvent[]> {
   const { data, error } = await supabase
-    .from('kid')
-    .select('current_balance')
-    .eq('id', kidId)
-    .single()
+    .from('sticker_event')
+    .select('*')
+    .eq('chapter_id', chapterId)
+    .order('created_at', { ascending: true })
   if (error) {
     throw error
   }
-  return data.current_balance
+  return data ?? []
 }
 
 interface AwardStickerArgs {
+  id: string
   kidId: string
   choreId: string | null
   chapterId: string
   parentId: string
-  amount: number
+  position: StickerPosition
 }
 
 export async function awardSticker(args: AwardStickerArgs): Promise<void> {
+  // One sticker_event = one sticker (amount=1). Phase 3 will loop for +N chores.
   const { error } = await supabase.from('sticker_event').insert({
+    id: args.id,
     kid_id: args.kidId,
     chore_id: args.choreId,
     chapter_id: args.chapterId,
     awarded_by: args.parentId,
-    amount: args.amount,
+    amount: 1,
+    position_x: args.position.x,
+    position_y: args.position.y,
+    rotation: args.position.rotation,
   })
+  if (error) {
+    throw error
+  }
+}
+
+export async function removeStickerEvent(id: string): Promise<void> {
+  const { error } = await supabase.from('sticker_event').delete().eq('id', id)
+  if (error) {
+    throw error
+  }
+}
+
+export async function clearChapterStickers(chapterId: string): Promise<void> {
+  const { error } = await supabase
+    .from('sticker_event')
+    .delete()
+    .eq('chapter_id', chapterId)
   if (error) {
     throw error
   }
