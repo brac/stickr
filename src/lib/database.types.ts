@@ -420,6 +420,15 @@ export type Database = {
         Args: { p_join_code: string; p_parent_name: string }
         Returns: string
       }
+      redeem_chapter: {
+        Args: {
+          p_kid_id: string
+          p_chapter_id: string
+          p_reward_tier_id: string
+          p_redeemed_by: string
+        }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

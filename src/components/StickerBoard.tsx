@@ -23,9 +23,11 @@ const FALLBACK_COLORS = [
 interface StickerBoardProps {
   events: StickerEvent[]
   layout: BoardLayout
+  // sticker_image_id -> public image URL, for events with assigned artwork.
+  imageUrls: Record<string, string>
 }
 
-export function StickerBoard({ events, layout }: StickerBoardProps) {
+export function StickerBoard({ events, layout, imageUrls }: StickerBoardProps) {
   const height = boardHeight(events.length || 1, layout.rowSize)
   return (
     <div
@@ -34,7 +36,10 @@ export function StickerBoard({ events, layout }: StickerBoardProps) {
     >
       {events.map((event, index) => {
         const pos = computeStickerPosition(event.id, index, layout)
-        const art = pickStickerArt(event.id)
+        const assigned = event.sticker_image_id
+          ? imageUrls[event.sticker_image_id]
+          : undefined
+        const art = assigned ?? pickStickerArt(event.id)
         return (
           <Sticker
             key={event.id}

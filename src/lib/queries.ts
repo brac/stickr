@@ -121,7 +121,7 @@ export async function fetchPastChapters(kidId: string): Promise<PastChapter[]> {
     .from('board_chapter')
     .select(`
       id, kid_id, started_at, ended_at,
-      redemption_event (
+      redemption_event!board_chapter_ended_by_redemption_fk (
         reward_tier ( name )
       )
     `)

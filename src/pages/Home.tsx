@@ -75,11 +75,8 @@ export function Home() {
         setChores(activeChores)
         setRewardTiers(tiers)
         setStickerImages(images)
-        if (theKid?.current_chapter_id) {
-          const chapterEvents = await fetchChapterEvents(theKid.current_chapter_id)
-          if (!active) return
-          setEvents(chapterEvents)
-        }
+        // Events load in the chapter-keyed effect below, so they reload
+        // automatically when a redemption switches to a fresh chapter.
       } catch (err) {
         if (active) setError(getErrorMessage(err))
       } finally {
@@ -91,10 +88,19 @@ export function Home() {
     }
   }, [])
 
-  // Realtime: append new stickers from the partner's phone as they land.
+  // Load + live-sync the current chapter's stickers. Keyed on chapterId so a
+  // redemption (which moves the kid to a fresh chapter) reloads the board.
   const chapterId = kid?.current_chapter_id ?? null
   useEffect(() => {
     if (!chapterId) return
+    let active = true
+    fetchChapterEvents(chapterId)
+      .then((rows) => {
+        if (active) setEvents(rows)
+      })
+      .catch((err) => {
+        if (active) setError(getErrorMessage(err))
+      })
     const channel = supabase
       .channel(`chapter-events-${chapterId}`)
       .on(
@@ -128,9 +134,43 @@ export function Home() {
       )
       .subscribe()
     return () => {
+      active = false
       supabase.removeChannel(channel)
     }
   }, [chapterId])
+
+  // Realtime: watch the kid row so a redemption on either device (which changes
+  // current_chapter_id) propagates here — the chapter-keyed effect then reloads
+  // the now-empty board.
+  const kidId = kid?.id ?? null
+  useEffect(() => {
+    if (!kidId) return
+    const channel = supabase
+      .channel(`kid-${kidId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'kid',
+          filter: `id=eq.${kidId}`,
+        },
+        (payload) => {
+          const next = payload.new as Kid
+          setKid((prev) =>
+            prev &&
+            prev.current_chapter_id === next.current_chapter_id &&
+            prev.current_balance === next.current_balance
+              ? prev
+              : next,
+          )
+        },
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [kidId])
 
   const total = useMemo(
     () => events.reduce((sum, event) => sum + event.amount, 0),
