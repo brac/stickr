@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
-import { useAuth } from '../auth/AuthProvider'
+import { useAuth } from '../auth/useAuth'
 import { FullScreenSpinner } from './FullScreenSpinner'
 
 export function RequireAuth({ children }: { children: ReactNode }) {

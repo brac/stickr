@@ -14,11 +14,16 @@ export function useBoardLayout(): UseBoardLayoutResult {
   const [el, setEl] = useState<HTMLElement | null>(null)
   const [width, setWidth] = useState(0)
 
-  const ref = useCallback((next: HTMLElement | null) => setEl(next), [])
+  // Measure synchronously in the ref callback (which behaves like an event
+  // handler, not effect code) so the first paint already has the real width.
+  // The effect below only owns the ResizeObserver subscription.
+  const ref = useCallback((next: HTMLElement | null) => {
+    setEl(next)
+    if (next) setWidth(next.clientWidth)
+  }, [])
 
   useEffect(() => {
     if (!el) return
-    setWidth(el.clientWidth)
     const observer = new ResizeObserver((entries) => {
       const next = entries[0]?.contentRect.width
       if (typeof next === 'number') {
