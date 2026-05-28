@@ -15,7 +15,7 @@ const PAD_TOP = 12
 const PAD_SIDE = 8
 const JITTER_X = 8
 const JITTER_Y = 6
-const JITTER_ROT_DEG = 15
+const JITTER_ROT_DEG = 28
 const MIN_ROW_SIZE = 4
 const MAX_ROW_SIZE = 24
 
