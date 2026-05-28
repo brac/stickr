@@ -1,0 +1,36 @@
+@import 'tailwindcss';
+
+/* Design tokens (Tailwind v4 @theme — exposed as utilities + CSS vars).
+   Parent-tool aesthetic: warm paper surface, calm green accent. */
+@theme {
+  --color-surface: oklch(97% 0.012 95);
+  --color-surface-raised: oklch(99% 0.006 95);
+  --color-ink: oklch(28% 0.02 260);
+  --color-ink-muted: oklch(52% 0.02 260);
+  --color-accent: oklch(58% 0.11 165);
+  --color-accent-strong: oklch(48% 0.12 165);
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+
+  --radius-card: 1rem;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-surface);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
