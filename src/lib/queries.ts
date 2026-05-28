@@ -1,5 +1,5 @@
 import { supabase } from './supabase'
-import type { Chore, Household, Kid, Parent, StickerEvent } from './types'
+import type { Household, Kid, Parent, RewardTier, StickerEvent } from './types'
 import type { StickerPosition } from './stickerPlacement'
 
 export async function fetchMyParent(): Promise<Parent | null> {
@@ -47,19 +47,6 @@ export async function fetchKid(householdId: string): Promise<Kid | null> {
   return data
 }
 
-export async function fetchActiveChores(householdId: string): Promise<Chore[]> {
-  const { data, error } = await supabase
-    .from('chore')
-    .select('*')
-    .eq('household_id', householdId)
-    .eq('active', true)
-    .order('sort_order', { ascending: true })
-  if (error) {
-    throw error
-  }
-  return data ?? []
-}
-
 export async function fetchChapterEvents(chapterId: string): Promise<StickerEvent[]> {
   const { data, error } = await supabase
     .from('sticker_event')
@@ -72,28 +59,33 @@ export async function fetchChapterEvents(chapterId: string): Promise<StickerEven
   return data ?? []
 }
 
-interface AwardStickerArgs {
+export interface NewSticker {
   id: string
   kidId: string
   choreId: string | null
   chapterId: string
   parentId: string
+  stickerImageId: string | null
   position: StickerPosition
 }
 
-export async function awardSticker(args: AwardStickerArgs): Promise<void> {
-  // One sticker_event = one sticker (amount=1). Phase 3 will loop for +N chores.
-  const { error } = await supabase.from('sticker_event').insert({
-    id: args.id,
-    kid_id: args.kidId,
-    chore_id: args.choreId,
-    chapter_id: args.chapterId,
-    awarded_by: args.parentId,
+// One sticker_event = one sticker (amount=1). A +N chore awards N at once,
+// each with its own id and position.
+export async function awardStickers(stickers: NewSticker[]): Promise<void> {
+  if (stickers.length === 0) return
+  const rows = stickers.map((sticker) => ({
+    id: sticker.id,
+    kid_id: sticker.kidId,
+    chore_id: sticker.choreId,
+    chapter_id: sticker.chapterId,
+    awarded_by: sticker.parentId,
+    sticker_image_id: sticker.stickerImageId,
     amount: 1,
-    position_x: args.position.x,
-    position_y: args.position.y,
-    rotation: args.position.rotation,
-  })
+    position_x: sticker.position.x,
+    position_y: sticker.position.y,
+    rotation: sticker.position.rotation,
+  }))
+  const { error } = await supabase.from('sticker_event').insert(rows)
   if (error) {
     throw error
   }
@@ -114,6 +106,38 @@ export async function clearChapterStickers(chapterId: string): Promise<void> {
   if (error) {
     throw error
   }
+}
+
+export async function fetchRewardTiers(householdId: string): Promise<RewardTier[]> {
+  const { data, error } = await supabase
+    .from('reward_tier')
+    .select('*')
+    .eq('household_id', householdId)
+    .order('threshold', { ascending: true })
+  if (error) {
+    throw error
+  }
+  return data ?? []
+}
+
+interface RedeemChapterArgs {
+  kidId: string
+  chapterId: string
+  rewardTierId: string
+  redeemedBy: string
+}
+
+export async function redeemChapter(args: RedeemChapterArgs): Promise<string> {
+  const { data, error } = await supabase.rpc('redeem_chapter', {
+    p_kid_id: args.kidId,
+    p_chapter_id: args.chapterId,
+    p_reward_tier_id: args.rewardTierId,
+    p_redeemed_by: args.redeemedBy,
+  })
+  if (error) {
+    throw error
+  }
+  return data as string
 }
 
 export async function createHousehold(args: {

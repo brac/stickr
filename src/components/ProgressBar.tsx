@@ -1,15 +1,17 @@
-// Placeholder tiers until Phase 4 reads `reward_tier` rows from the DB.
-const TIERS: readonly number[] = [10, 25, 50]
-const MAX = TIERS[TIERS.length - 1]
+import type { RewardTier } from '../lib/types'
 
 interface ProgressBarProps {
   total: number
+  tiers: RewardTier[]
+  onClaimClick: () => void
 }
 
-export function ProgressBar({ total }: ProgressBarProps) {
-  const fillPct = Math.min(total / MAX, 1) * 100
-  const nextTier = TIERS.find((tier) => tier > total)
-  const remaining = nextTier ? nextTier - total : 0
+export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
+  const sorted = [...tiers].sort((a, b) => a.threshold - b.threshold)
+  const max = sorted[sorted.length - 1]?.threshold ?? 50
+  const fillPct = Math.min(total / max, 1) * 100
+  const nextTier = sorted.find((t) => t.threshold > total)
+  const unlockedCount = sorted.filter((t) => t.threshold <= total).length
 
   return (
     <div className="mt-4">
@@ -18,22 +20,35 @@ export function ProgressBar({ total }: ProgressBarProps) {
           className="absolute inset-y-0 left-0 rounded-full bg-accent transition-[width] duration-300 ease-out"
           style={{ width: `${fillPct}%` }}
         />
-        {TIERS.map((tier) => (
+        {sorted.map((tier) => (
           <span
-            key={tier}
+            key={tier.id}
             className="pointer-events-none absolute top-0 h-full w-px bg-black/30"
-            style={{ left: `${(tier / MAX) * 100}%` }}
+            style={{ left: `${(tier.threshold / max) * 100}%` }}
             aria-hidden="true"
           />
         ))}
       </div>
+
       <div className="mt-2 flex items-baseline justify-between text-sm">
         <span className="font-medium text-ink">
           {total} {total === 1 ? 'sticker' : 'stickers'}
         </span>
-        <span className="text-ink-muted">
-          {nextTier ? `${remaining} to go for ${nextTier}` : 'All tiers reached'}
-        </span>
+        {unlockedCount > 0 ? (
+          <button
+            type="button"
+            onClick={onClaimClick}
+            className="font-semibold text-accent underline-offset-2 hover:underline"
+          >
+            {unlockedCount === 1 ? '1 reward ready' : `${unlockedCount} rewards ready`} →
+          </button>
+        ) : (
+          <span className="text-ink-muted">
+            {nextTier
+              ? `${nextTier.threshold - total} to go · ${nextTier.name}`
+              : 'All tiers reached'}
+          </span>
+        )}
       </div>
     </div>
   )

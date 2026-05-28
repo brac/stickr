@@ -10,16 +10,19 @@ import {
   fetchHousehold,
   fetchKid,
   fetchMyParent,
+  fetchRewardTiers,
+  redeemChapter,
   removeStickerEvent,
 } from '../lib/queries'
 import { computeStickerPosition } from '../lib/stickerPlacement'
 import { useBoardLayout } from '../hooks/useBoardLayout'
 import { getErrorMessage } from '../lib/errors'
-import type { Chore, Household, Kid, Parent, StickerEvent } from '../lib/types'
+import type { Chore, Household, Kid, Parent, RewardTier, StickerEvent } from '../lib/types'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { StickerBoard } from '../components/StickerBoard'
 import { ProgressBar } from '../components/ProgressBar'
 import { BoardMenu } from '../components/BoardMenu'
+import { RedemptionSheet } from '../components/RedemptionSheet'
 
 export function Home() {
   const { signOut } = useAuth()
@@ -30,7 +33,9 @@ export function Home() {
   const [kid, setKid] = useState<Kid | null>(null)
   const [chores, setChores] = useState<Chore[]>([])
   const [events, setEvents] = useState<StickerEvent[]>([])
+  const [rewardTiers, setRewardTiers] = useState<RewardTier[]>([])
   const [awardingId, setAwardingId] = useState<string | null>(null)
+  const [showRedemption, setShowRedemption] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
   const { ref: boardRef, layout } = useBoardLayout()
 
@@ -45,15 +50,17 @@ export function Home() {
           return
         }
         setParent(myParent)
-        const [hh, theKid, activeChores] = await Promise.all([
+        const [hh, theKid, activeChores, tiers] = await Promise.all([
           fetchHousehold(myParent.household_id),
           fetchKid(myParent.household_id),
           fetchActiveChores(myParent.household_id),
+          fetchRewardTiers(myParent.household_id),
         ])
         if (!active) return
         setHousehold(hh)
         setKid(theKid)
         setChores(activeChores)
+        setRewardTiers(tiers)
         if (theKid?.current_chapter_id) {
           const chapterEvents = await fetchChapterEvents(theKid.current_chapter_id)
           if (!active) return
@@ -187,6 +194,28 @@ export function Home() {
     }
   }, [kid, events])
 
+  const handleRedeem = useCallback(
+    async (tier: RewardTier) => {
+      if (!parent || !kid || !kid.current_chapter_id) return
+      setError(null)
+      try {
+        const newChapterId = await redeemChapter({
+          kidId: kid.id,
+          chapterId: kid.current_chapter_id,
+          rewardTierId: tier.id,
+          redeemedBy: parent.id,
+        })
+        // Fresh chapter: clear the board and update the kid's chapter pointer.
+        setEvents([])
+        setKid((prev) => prev ? { ...prev, current_chapter_id: newChapterId, current_balance: 0 } : prev)
+        setShowRedemption(false)
+      } catch (err) {
+        setError(getErrorMessage(err))
+      }
+    },
+    [parent, kid],
+  )
+
   if (loading) {
     return <FullScreenSpinner />
   }
@@ -223,7 +252,11 @@ export function Home() {
         <div ref={boardRef} className="mt-3 w-full">
           <StickerBoard events={events} layout={layout} />
         </div>
-        <ProgressBar total={total} />
+        <ProgressBar
+          total={total}
+          tiers={rewardTiers}
+          onClaimClick={() => setShowRedemption(true)}
+        />
       </section>
 
       {error && (
@@ -251,6 +284,15 @@ export function Home() {
           </p>
         )}
       </section>
+
+      {showRedemption && (
+        <RedemptionSheet
+          tiers={rewardTiers}
+          total={total}
+          onRedeem={handleRedeem}
+          onClose={() => setShowRedemption(false)}
+        />
+      )}
     </div>
   )
 }
