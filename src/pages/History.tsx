@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import {
   fetchChapterEvents,
-  fetchKid,
+  fetchKids,
   fetchMyParent,
   fetchPastChapters,
   type PastChapter,
@@ -9,7 +9,7 @@ import {
 import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
-import type { StickerEvent } from '../lib/types'
+import type { Kid, StickerEvent } from '../lib/types'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { ChapterSnapshot } from '../components/ChapterSnapshot'
 import { SetupShell } from '../components/SetupShell'
@@ -115,18 +115,22 @@ function ChapterCard({ chapter, imageUrls }: ChapterCardProps) {
 
 export function History() {
   const toast = useToast()
+  const [kids, setKids] = useState<Kid[]>([])
+  const [selectedKidId, setSelectedKidId] = useState<string | null>(null)
   const [chapters, setChapters] = useState<PastChapter[]>([])
   const [imageUrls, setImageUrls] = useState<Record<string, string>>({})
   const [loading, setLoading] = useState(true)
+  const [chaptersLoading, setChaptersLoading] = useState(false)
 
+  // Load household kids + sticker art once.
   useEffect(() => {
     let active = true
     ;(async () => {
       try {
         const myParent = await fetchMyParent()
         if (!active || !myParent) return
-        const [kid, images] = await Promise.all([
-          fetchKid(myParent.household_id),
+        const [theKids, images] = await Promise.all([
+          fetchKids(myParent.household_id),
           fetchStickerImages(myParent.household_id),
         ])
         if (!active) return
@@ -135,9 +139,8 @@ export function History() {
           map[image.id] = stickerImageUrl(image.storage_path)
         }
         setImageUrls(map)
-        if (!kid) return
-        const past = await fetchPastChapters(kid.id)
-        if (active) setChapters(past)
+        setKids(theKids)
+        setSelectedKidId(theKids[0]?.id ?? null)
       } catch (err) {
         if (active) toast.error(getErrorMessage(err))
       } finally {
@@ -149,13 +152,65 @@ export function History() {
     }
   }, [toast])
 
+  // (Re)load past chapters when the selected kid changes.
+  useEffect(() => {
+    if (!selectedKidId) return
+    let active = true
+    ;(async () => {
+      setChaptersLoading(true)
+      try {
+        const past = await fetchPastChapters(selectedKidId)
+        if (active) setChapters(past)
+      } catch (err) {
+        if (active) toast.error(getErrorMessage(err))
+      } finally {
+        if (active) setChaptersLoading(false)
+      }
+    })()
+    return () => {
+      active = false
+    }
+  }, [selectedKidId, toast])
+
   if (loading) {
     return <FullScreenSpinner />
   }
 
   return (
     <SetupShell title="History" backTo="/">
-      {chapters.length === 0 ? (
+      {kids.length > 1 && (
+        <div
+          className="mb-4 flex gap-1.5 overflow-x-auto rounded-lg bg-black/5 p-1"
+          role="tablist"
+          aria-label="Choose kid"
+        >
+          {kids.map((kid) => {
+            const isSelected = kid.id === selectedKidId
+            return (
+              <button
+                key={kid.id}
+                type="button"
+                role="tab"
+                aria-selected={isSelected}
+                onClick={() => setSelectedKidId(kid.id)}
+                className={`shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  isSelected
+                    ? 'bg-surface-raised text-ink shadow-sm'
+                    : 'text-ink-muted'
+                }`}
+              >
+                {kid.name}
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {chaptersLoading ? (
+        <div className="flex h-32 items-center justify-center">
+          <span className="text-sm text-ink-muted">Loading…</span>
+        </div>
+      ) : chapters.length === 0 ? (
         <div className="mt-12 text-center">
           <p className="font-medium text-ink">No completed chapters yet</p>
           <p className="mt-1 text-sm text-ink-muted">

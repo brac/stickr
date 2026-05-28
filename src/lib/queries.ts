@@ -33,18 +33,35 @@ export async function fetchHousehold(householdId: string): Promise<Household | n
   return data
 }
 
-export async function fetchKid(householdId: string): Promise<Kid | null> {
+export async function fetchKids(householdId: string): Promise<Kid[]> {
   const { data, error } = await supabase
     .from('kid')
     .select('*')
     .eq('household_id', householdId)
     .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle()
   if (error) {
     throw error
   }
-  return data
+  return data ?? []
+}
+
+// Convenience for single-kid callers (onboarding check, etc.) — the first kid
+// in the household by creation order.
+export async function fetchKid(householdId: string): Promise<Kid | null> {
+  const kids = await fetchKids(householdId)
+  return kids[0] ?? null
+}
+
+// Kid rows are read-only from the client; creation goes through an RPC that also
+// seeds the kid's first board_chapter. Returns the new kid id.
+export async function createKid(name: string): Promise<string> {
+  const { data, error } = await supabase.rpc('create_kid', {
+    p_kid_name: name,
+  })
+  if (error) {
+    throw error
+  }
+  return data as string
 }
 
 export async function fetchChapterEvents(chapterId: string): Promise<StickerEvent[]> {
@@ -215,6 +232,15 @@ export async function createHousehold(args: {
     p_parent_name: args.parentName,
     p_kid_name: args.kidName,
   })
+  if (error) {
+    throw error
+  }
+}
+
+export type BoardDisplayMode = 'focused' | 'side_by_side'
+
+export async function setBoardLayout(layout: BoardDisplayMode): Promise<void> {
+  const { error } = await supabase.rpc('set_board_layout', { p_layout: layout })
   if (error) {
     throw error
   }

@@ -6,6 +6,7 @@ import { SignIn } from './pages/SignIn'
 import { Onboarding } from './pages/Onboarding'
 import { SetupHome } from './pages/SetupHome'
 import { StickerLibrary } from './pages/StickerLibrary'
+import { KidManager } from './pages/KidManager'
 import { ChoreManager } from './pages/ChoreManager'
 import { RewardManager } from './pages/RewardManager'
 import { History } from './pages/History'
@@ -44,6 +45,14 @@ export default function App() {
           element={
             <RequireAuth>
               <StickerLibrary />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/setup/kids"
+          element={
+            <RequireAuth>
+              <KidManager />
             </RequireAuth>
           }
         />

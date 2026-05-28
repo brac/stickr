@@ -106,18 +106,21 @@ export type Database = {
       }
       household: {
         Row: {
+          board_layout: string
           created_at: string
           id: string
           join_code: string
           name: string
         }
         Insert: {
+          board_layout?: string
           created_at?: string
           id?: string
           join_code: string
           name: string
         }
         Update: {
+          board_layout?: string
           created_at?: string
           id?: string
           join_code?: string
@@ -416,6 +419,10 @@ export type Database = {
         }
         Returns: string
       }
+      create_kid: {
+        Args: { p_kid_name: string }
+        Returns: string
+      }
       current_household_id: { Args: never; Returns: string }
       current_parent_id: { Args: never; Returns: string }
       gen_join_code: { Args: never; Returns: string }
@@ -431,6 +438,10 @@ export type Database = {
           p_redeemed_by: string
         }
         Returns: string
+      }
+      set_board_layout: {
+        Args: { p_layout: string }
+        Returns: undefined
       }
     }
     Enums: {

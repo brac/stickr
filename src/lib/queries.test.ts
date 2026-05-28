@@ -20,6 +20,8 @@ import {
   fetchMyParent,
   fetchHousehold,
   fetchKid,
+  fetchKids,
+  createKid,
   fetchChapterEvents,
   fetchPastChapters,
   fetchRewardTiers,
@@ -208,9 +210,21 @@ describe('single-row fetchers', () => {
     await expect(fetchHousehold('hh-1')).rejects.toBe(error)
   })
 
+  it('fetchKids returns all kids, coalescing null to an empty array', async () => {
+    fromMock.mockReturnValue(queryResult({ data: null, error: null }))
+    await expect(fetchKids('hh-1')).resolves.toEqual([])
+  })
+
   it('fetchKid returns the first kid in the household', async () => {
-    fromMock.mockReturnValue(queryResult({ data: { id: 'kid-1' }, error: null }))
+    fromMock.mockReturnValue(
+      queryResult({ data: [{ id: 'kid-1' }, { id: 'kid-2' }], error: null }),
+    )
     await expect(fetchKid('hh-1')).resolves.toEqual({ id: 'kid-1' })
+  })
+
+  it('fetchKid returns null when the household has no kids', async () => {
+    fromMock.mockReturnValue(queryResult({ data: [], error: null }))
+    await expect(fetchKid('hh-1')).resolves.toBeNull()
   })
 })
 
@@ -313,5 +327,17 @@ describe('rpc wrappers', () => {
       p_join_code: 'ABC123',
       p_parent_name: 'Sam',
     })
+  })
+
+  it('createKid forwards the name and returns the new kid id', async () => {
+    rpcMock.mockResolvedValue({ data: 'kid-9', error: null })
+    await expect(createKid('Pip')).resolves.toBe('kid-9')
+    expect(rpcMock).toHaveBeenCalledWith('create_kid', { p_kid_name: 'Pip' })
+  })
+
+  it('createKid throws on rpc error', async () => {
+    const error = new Error('rpc failed')
+    rpcMock.mockResolvedValue({ data: null, error })
+    await expect(createKid('Pip')).rejects.toBe(error)
   })
 })

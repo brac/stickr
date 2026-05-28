@@ -3,6 +3,11 @@ import { SetupShell } from '../components/SetupShell'
 
 const LINKS = [
   {
+    to: '/setup/kids',
+    title: 'Kids',
+    description: 'Add or view the kids in your household. Each gets their own board.',
+  },
+  {
     to: '/setup/chores',
     title: 'Chores',
     description: 'The buttons on the board. Name, value, and which sticker they drop.',
