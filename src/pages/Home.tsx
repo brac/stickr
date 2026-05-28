@@ -26,6 +26,8 @@ import {
   removeQueuedAwards,
 } from '../lib/offlineQueue'
 import { getErrorMessage } from '../lib/errors'
+import { vibrateAward, vibrateRedeem, vibrateUndo } from '../lib/haptics'
+import { celebrateRedemption } from '../lib/celebrate'
 import { useToast } from '../components/toast/useToast'
 import type {
   Chore,
@@ -54,6 +56,10 @@ interface AwardParams {
   count: number
 }
 
+// How long a freshly awarded sticker keeps its drop-in flag, after which it is
+// cleared from state. Comfortably past the 460ms drop animation.
+const NEW_STICKER_MS = 600
+
 function pluralStickers(count: number): string {
   return `${count} ${count === 1 ? 'sticker' : 'stickers'}`
 }
@@ -72,6 +78,7 @@ export function Home() {
   const [rewardTiers, setRewardTiers] = useState<RewardTier[]>([])
   const [stickerImages, setStickerImages] = useState<StickerImage[]>([])
   const [awardingId, setAwardingId] = useState<string | null>(null)
+  const [newIds, setNewIds] = useState<ReadonlySet<string>>(() => new Set())
   const [showRedemption, setShowRedemption] = useState(false)
   const [showCustom, setShowCustom] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
@@ -226,6 +233,23 @@ export function Home() {
     return map
   }, [chores])
 
+  // Flag just-awarded ids so they drop in with extra flourish, then clear them
+  // shortly after the animation has played.
+  const markNew = useCallback((ids: string[]) => {
+    setNewIds((prev) => {
+      const next = new Set(prev)
+      ids.forEach((id) => next.add(id))
+      return next
+    })
+    window.setTimeout(() => {
+      setNewIds((prev) => {
+        const next = new Set(prev)
+        ids.forEach((id) => next.delete(id))
+        return next
+      })
+    }, NEW_STICKER_MS)
+  }, [])
+
   // Holds the latest submitAward so the retry action can call it without the
   // callback referencing itself (which breaks memoization).
   const submitAwardRef = useRef<((params: AwardParams) => void) | null>(null)
@@ -255,8 +279,10 @@ export function Home() {
         })
       }
       const optimistic = newStickers.map(newStickerToEvent)
-      const newIds = new Set(newStickers.map((sticker) => sticker.id))
+      const awardedIds = new Set(newStickers.map((sticker) => sticker.id))
       setEvents((prev) => [...prev, ...optimistic])
+      markNew([...awardedIds])
+      vibrateAward()
       try {
         await awardStickers(newStickers)
       } catch (err) {
@@ -266,7 +292,7 @@ export function Home() {
             `Offline — ${pluralStickers(params.count)} queued, will sync when you reconnect.`,
           )
         } else {
-          setEvents((prev) => prev.filter((event) => !newIds.has(event.id)))
+          setEvents((prev) => prev.filter((event) => !awardedIds.has(event.id)))
           toast.error(getErrorMessage(err), {
             action: {
               label: 'Retry',
@@ -276,7 +302,7 @@ export function Home() {
         }
       }
     },
-    [parent, kid, events.length, layout, toast],
+    [parent, kid, events.length, layout, markNew, toast],
   )
 
   useEffect(() => {
@@ -337,6 +363,7 @@ export function Home() {
   const handleUndoLast = useCallback(async () => {
     const last = events[events.length - 1]
     if (!last) return
+    vibrateUndo()
     setEvents((prev) => prev.filter((event) => event.id !== last.id))
     try {
       await removeStickerEvent(last.id)
@@ -386,7 +413,9 @@ export function Home() {
             : prev,
         )
         setShowRedemption(false)
-        toast.success(`"${tier.name}" claimed! Fresh board started.`)
+        vibrateRedeem()
+        void celebrateRedemption()
+        toast.success(`"${tier.name}" claimed!`)
       } catch (err) {
         toast.error(getErrorMessage(err))
       }
@@ -436,7 +465,12 @@ export function Home() {
           {kid?.name}'s board
         </p>
         <div ref={boardRef} className="mt-3 w-full">
-          <StickerBoard events={events} layout={layout} imageUrls={imageUrls} />
+          <StickerBoard
+            events={events}
+            layout={layout}
+            imageUrls={imageUrls}
+            newIds={newIds}
+          />
         </div>
         <ProgressBar
           total={total}

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useState, type CSSProperties } from 'react'
 import {
   STICKER_SIZE,
   boardHeight,
@@ -25,9 +25,18 @@ interface StickerBoardProps {
   layout: BoardLayout
   // sticker_image_id -> public image URL, for events with assigned artwork.
   imageUrls: Record<string, string>
+  // Event ids awarded just now — these drop in with extra flourish. The parent
+  // may clear ids after the animation; each Sticker captures its entrance at
+  // mount, so clearing never restarts an already-played animation.
+  newIds?: ReadonlySet<string>
 }
 
-export function StickerBoard({ events, layout, imageUrls }: StickerBoardProps) {
+export function StickerBoard({
+  events,
+  layout,
+  imageUrls,
+  newIds,
+}: StickerBoardProps) {
   const height = boardHeight(events.length || 1, layout.rowSize)
   return (
     <div
@@ -48,6 +57,7 @@ export function StickerBoard({ events, layout, imageUrls }: StickerBoardProps) {
             y={pos.y}
             rotation={pos.rotation}
             artUrl={art}
+            isNew={newIds?.has(event.id) ?? false}
           />
         )
       })}
@@ -66,9 +76,14 @@ interface StickerProps {
   y: number
   rotation: number
   artUrl: string | null
+  isNew: boolean
 }
 
-function Sticker({ seedId, x, y, rotation, artUrl }: StickerProps) {
+function Sticker({ seedId, x, y, rotation, artUrl, isNew }: StickerProps) {
+  // Capture the entrance once, at mount: a freshly awarded sticker drops in,
+  // everything else gets the gentle pop. Frozen so a later prop change (e.g. the
+  // parent clearing newIds) can't retrigger the animation.
+  const [entrance] = useState(() => (isNew ? 'sticker-drop' : 'sticker-pop'))
   const style: CSSProperties & Record<'--x' | '--y' | '--rot', string> = {
     width: STICKER_SIZE,
     height: STICKER_SIZE,
@@ -77,7 +92,7 @@ function Sticker({ seedId, x, y, rotation, artUrl }: StickerProps) {
     '--rot': `${rotation}deg`,
   }
   return (
-    <div className="sticker-pop absolute top-0 left-0" style={style}>
+    <div className={`${entrance} absolute top-0 left-0`} style={style}>
       {artUrl ? (
         <img
           src={artUrl}

@@ -52,13 +52,17 @@ body {
     0 6px 18px oklch(28% 0.05 60 / 0.15);
 }
 
-/* Stickers land with a tiny pop. Compositor-friendly: only transform + opacity. */
-.sticker-pop {
+/* Stickers land with a pop. Compositor-friendly: only transform + opacity.
+   Two entrances share the same resting transform + lift:
+   - .sticker-pop   the gentle board-entrance used when a chapter renders
+   - .sticker-drop  a punchier drop-from-above for a freshly awarded sticker,
+                    so each award reads as an event rather than just appearing. */
+.sticker-pop,
+.sticker-drop {
   --x: 0px;
   --y: 0px;
   --rot: 0deg;
   transform: translate(var(--x), var(--y)) rotate(var(--rot));
-  animation: sticker-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
   will-change: transform;
   /* Layered lift: a tight contact shadow anchors the sticker to the board, a
      softer cast shadow lifts it off. Warm-toned to match the corkboard rather
@@ -66,6 +70,12 @@ body {
   filter:
     drop-shadow(0 1px 1px oklch(30% 0.05 60 / 0.4))
     drop-shadow(0 5px 6px oklch(28% 0.05 60 / 0.32));
+}
+.sticker-pop {
+  animation: sticker-pop 320ms cubic-bezier(0.2, 0.9, 0.3, 1) both;
+}
+.sticker-drop {
+  animation: sticker-drop 460ms cubic-bezier(0.18, 1.2, 0.4, 1) both;
 }
 @keyframes sticker-pop {
   0% {
@@ -81,8 +91,27 @@ body {
     opacity: 1;
   }
 }
+@keyframes sticker-drop {
+  0% {
+    transform: translate(var(--x), calc(var(--y) - 30px)) rotate(var(--rot))
+      scale(0.3);
+    opacity: 0;
+  }
+  55% {
+    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(1.2);
+    opacity: 1;
+  }
+  72% {
+    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(0.93);
+  }
+  100% {
+    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(1);
+    opacity: 1;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
-  .sticker-pop {
+  .sticker-pop,
+  .sticker-drop {
     animation: none;
   }
 }
