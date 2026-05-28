@@ -11,6 +11,9 @@ node_modules
 dist
 dist-ssr
 coverage
+test-results
+playwright-report
+playwright/.cache
 *.local
 
 # Env (secrets live in .env.local; .env.example is committed)

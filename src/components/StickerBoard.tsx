@@ -42,6 +42,7 @@ export function StickerBoard({
     <div
       className="corkboard relative w-full overflow-hidden"
       style={{ height }}
+      data-testid="sticker-board"
     >
       {events.map((event, index) => {
         const pos = computeStickerPosition(event.id, index, layout)
@@ -92,7 +93,11 @@ function Sticker({ seedId, x, y, rotation, artUrl, isNew }: StickerProps) {
     '--rot': `${rotation}deg`,
   }
   return (
-    <div className={`${entrance} absolute top-0 left-0`} style={style}>
+    <div
+      className={`${entrance} absolute top-0 left-0`}
+      style={style}
+      data-testid="sticker"
+    >
       {artUrl ? (
         <img
           src={artUrl}
