@@ -278,15 +278,24 @@ export function Home() {
           rewardTierId: tier.id,
           redeemedBy: parent.id,
         })
-        // Fresh chapter: clear the board and update the kid's chapter pointer.
-        setEvents([])
-        setKid((prev) => prev ? { ...prev, current_chapter_id: newChapterId, current_balance: 0 } : prev)
+        // Stickers earned beyond the threshold carry onto the fresh chapter.
+        // The server moves the most recent surplus events, so optimistically
+        // keep that same tail (same ids) — the chapter-keyed effect then
+        // refetches the new chapter and confirms.
+        const surplus = Math.max(0, total - tier.threshold)
+        const carried = surplus > 0 ? events.slice(-surplus) : []
+        setEvents(carried)
+        setKid((prev) =>
+          prev
+            ? { ...prev, current_chapter_id: newChapterId, current_balance: surplus }
+            : prev,
+        )
         setShowRedemption(false)
       } catch (err) {
         setError(getErrorMessage(err))
       }
     },
-    [parent, kid],
+    [parent, kid, total, events],
   )
 
   if (loading) {
@@ -354,11 +363,11 @@ export function Home() {
               className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] bg-accent px-4 py-5 font-medium text-white shadow-sm transition-transform active:scale-95 disabled:opacity-60"
             >
               {choreImage && (
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+                <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/15">
                   <img
                     src={choreImage}
                     alt=""
-                    className="h-9 w-9 object-contain"
+                    className="h-11 w-11 object-contain"
                     draggable={false}
                   />
                 </span>

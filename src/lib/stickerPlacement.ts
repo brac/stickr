@@ -9,8 +9,8 @@
 // layout can re-flow as the viewport changes. The DB columns still receive a
 // snapshot at award time for history/audit.
 
-export const STICKER_SIZE = 48
-export const CELL_SIZE = 56 // sticker + gap
+export const STICKER_SIZE = 75
+export const CELL_SIZE = 84 // sticker + a tight gap, so the board reads as packed
 const PAD_TOP = 12
 const PAD_SIDE = 8
 const JITTER_X = 8
