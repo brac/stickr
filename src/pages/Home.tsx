@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthProvider'
 import { supabase } from '../lib/supabase'
 import {
-  awardSticker,
+  awardStickers,
   clearChapterStickers,
-  fetchActiveChores,
   fetchChapterEvents,
   fetchHousehold,
   fetchKid,
@@ -13,11 +12,22 @@ import {
   fetchRewardTiers,
   redeemChapter,
   removeStickerEvent,
+  type NewSticker,
 } from '../lib/queries'
+import { fetchActiveChores } from '../lib/chores'
+import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
 import { computeStickerPosition } from '../lib/stickerPlacement'
 import { useBoardLayout } from '../hooks/useBoardLayout'
 import { getErrorMessage } from '../lib/errors'
-import type { Chore, Household, Kid, Parent, RewardTier, StickerEvent } from '../lib/types'
+import type {
+  Chore,
+  Household,
+  Kid,
+  Parent,
+  RewardTier,
+  StickerEvent,
+  StickerImage,
+} from '../lib/types'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { StickerBoard } from '../components/StickerBoard'
 import { ProgressBar } from '../components/ProgressBar'
@@ -26,6 +36,7 @@ import { RedemptionSheet } from '../components/RedemptionSheet'
 
 export function Home() {
   const { signOut } = useAuth()
+  const navigate = useNavigate()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [parent, setParent] = useState<Parent | null>(null)
@@ -34,6 +45,7 @@ export function Home() {
   const [chores, setChores] = useState<Chore[]>([])
   const [events, setEvents] = useState<StickerEvent[]>([])
   const [rewardTiers, setRewardTiers] = useState<RewardTier[]>([])
+  const [stickerImages, setStickerImages] = useState<StickerImage[]>([])
   const [awardingId, setAwardingId] = useState<string | null>(null)
   const [showRedemption, setShowRedemption] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
@@ -50,17 +62,19 @@ export function Home() {
           return
         }
         setParent(myParent)
-        const [hh, theKid, activeChores, tiers] = await Promise.all([
+        const [hh, theKid, activeChores, tiers, images] = await Promise.all([
           fetchHousehold(myParent.household_id),
           fetchKid(myParent.household_id),
           fetchActiveChores(myParent.household_id),
           fetchRewardTiers(myParent.household_id),
+          fetchStickerImages(myParent.household_id),
         ])
         if (!active) return
         setHousehold(hh)
         setKid(theKid)
         setChores(activeChores)
         setRewardTiers(tiers)
+        setStickerImages(images)
         if (theKid?.current_chapter_id) {
           const chapterEvents = await fetchChapterEvents(theKid.current_chapter_id)
           if (!active) return
@@ -123,38 +137,57 @@ export function Home() {
     [events],
   )
 
+  // sticker_image_id -> public URL, for chore buttons and board rendering.
+  const imageUrls = useMemo(() => {
+    const map: Record<string, string> = {}
+    for (const image of stickerImages) {
+      map[image.id] = stickerImageUrl(image.storage_path)
+    }
+    return map
+  }, [stickerImages])
+
   const handleAward = useCallback(
     async (chore: Chore) => {
       if (!parent || !kid || !kid.current_chapter_id) return
-      const id = crypto.randomUUID()
-      const position = computeStickerPosition(id, events.length, layout)
-      const optimistic: StickerEvent = {
-        id,
-        kid_id: kid.id,
-        chore_id: chore.id,
-        chapter_id: kid.current_chapter_id,
-        sticker_image_id: null,
-        awarded_by: parent.id,
-        amount: 1,
-        position_x: position.x,
-        position_y: position.y,
-        rotation: position.rotation,
-        created_at: new Date().toISOString(),
-      }
-      setEvents((prev) => [...prev, optimistic])
-      setAwardingId(chore.id)
-      setError(null)
-      try {
-        await awardSticker({
+      const chapterId = kid.current_chapter_id
+      const baseIndex = events.length
+      // A +N chore drops N stickers, each its own event and position.
+      const newStickers: NewSticker[] = []
+      const optimistic: StickerEvent[] = []
+      for (let i = 0; i < chore.sticker_value; i++) {
+        const id = crypto.randomUUID()
+        const position = computeStickerPosition(id, baseIndex + i, layout)
+        newStickers.push({
           id,
           kidId: kid.id,
           choreId: chore.id,
-          chapterId: kid.current_chapter_id,
+          chapterId,
           parentId: parent.id,
+          stickerImageId: chore.sticker_image_id,
           position,
         })
+        optimistic.push({
+          id,
+          kid_id: kid.id,
+          chore_id: chore.id,
+          chapter_id: chapterId,
+          sticker_image_id: chore.sticker_image_id,
+          awarded_by: parent.id,
+          amount: 1,
+          position_x: position.x,
+          position_y: position.y,
+          rotation: position.rotation,
+          created_at: new Date().toISOString(),
+        })
+      }
+      const newIds = new Set(newStickers.map((sticker) => sticker.id))
+      setEvents((prev) => [...prev, ...optimistic])
+      setAwardingId(chore.id)
+      setError(null)
+      try {
+        await awardStickers(newStickers)
       } catch (err) {
-        setEvents((prev) => prev.filter((event) => event.id !== id))
+        setEvents((prev) => prev.filter((event) => !newIds.has(event.id)))
         setError(getErrorMessage(err))
       } finally {
         setAwardingId(null)
@@ -239,6 +272,8 @@ export function Home() {
         </div>
         <BoardMenu
           undoDisabled={events.length === 0}
+          onSetup={() => navigate('/setup')}
+          onHistory={() => navigate('/history')}
           onUndoLast={() => void handleUndoLast()}
           onResetBoard={() => void handleResetBoard()}
           onSignOut={() => void signOut()}
@@ -250,7 +285,7 @@ export function Home() {
           {kid?.name}'s board
         </p>
         <div ref={boardRef} className="mt-3 w-full">
-          <StickerBoard events={events} layout={layout} />
+          <StickerBoard events={events} layout={layout} imageUrls={imageUrls} />
         </div>
         <ProgressBar
           total={total}
@@ -265,23 +300,42 @@ export function Home() {
         </p>
       )}
 
-      <section className="mt-6 grid grid-cols-2 gap-3">
-        {chores.map((chore) => (
-          <button
-            key={chore.id}
-            type="button"
-            disabled={awardingId !== null}
-            onClick={() => void handleAward(chore)}
-            className="flex flex-col items-center gap-1 rounded-[var(--radius-card)] bg-accent px-4 py-5 font-medium text-white shadow-sm transition-transform active:scale-95 disabled:opacity-60"
-          >
-            <span className="text-base">{chore.name}</span>
-            <span className="text-sm text-white/80">+{chore.sticker_value}</span>
-          </button>
-        ))}
+      <section className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {chores.map((chore) => {
+          const choreImage = chore.sticker_image_id
+            ? imageUrls[chore.sticker_image_id]
+            : undefined
+          return (
+            <button
+              key={chore.id}
+              type="button"
+              disabled={awardingId !== null}
+              onClick={() => void handleAward(chore)}
+              className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] bg-accent px-4 py-5 font-medium text-white shadow-sm transition-transform active:scale-95 disabled:opacity-60"
+            >
+              {choreImage && (
+                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/15">
+                  <img
+                    src={choreImage}
+                    alt=""
+                    className="h-9 w-9 object-contain"
+                    draggable={false}
+                  />
+                </span>
+              )}
+              <span className="text-base">{chore.name}</span>
+              <span className="text-sm text-white/80">+{chore.sticker_value}</span>
+            </button>
+          )
+        })}
         {chores.length === 0 && (
-          <p className="col-span-2 text-center text-sm text-ink-muted">
-            No chores yet. You'll add these in setup.
-          </p>
+          <button
+            type="button"
+            onClick={() => navigate('/setup/chores')}
+            className="col-span-full rounded-[var(--radius-card)] border-2 border-dashed border-black/15 px-4 py-6 text-sm text-ink-muted transition-colors hover:border-accent/50 hover:text-ink"
+          >
+            No chores yet — tap to add one
+          </button>
         )}
       </section>
 

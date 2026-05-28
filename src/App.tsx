@@ -4,6 +4,11 @@ import { RequireAuth } from './components/RequireAuth'
 import { Home } from './pages/Home'
 import { SignIn } from './pages/SignIn'
 import { Onboarding } from './pages/Onboarding'
+import { SetupHome } from './pages/SetupHome'
+import { StickerLibrary } from './pages/StickerLibrary'
+import { ChoreManager } from './pages/ChoreManager'
+import { RewardManager } from './pages/RewardManager'
+import { History } from './pages/History'
 
 export default function App() {
   return (
@@ -23,6 +28,46 @@ export default function App() {
           element={
             <RequireAuth>
               <Home />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/setup"
+          element={
+            <RequireAuth>
+              <SetupHome />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/setup/stickers"
+          element={
+            <RequireAuth>
+              <StickerLibrary />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/setup/chores"
+          element={
+            <RequireAuth>
+              <ChoreManager />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/setup/rewards"
+          element={
+            <RequireAuth>
+              <RewardManager />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/history"
+          element={
+            <RequireAuth>
+              <History />
             </RequireAuth>
           }
         />

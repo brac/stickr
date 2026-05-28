@@ -1,15 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 
 interface BoardMenuProps {
+  onSetup: () => void
+  onHistory: () => void
   onUndoLast: () => void
   onResetBoard: () => void
   onSignOut: () => void
   undoDisabled: boolean
 }
 
-// Discreet admin menu: present but not prominent. Holds correction actions
-// (undo a mis-tap, reset the board) plus sign out.
+// Discreet admin menu: present but not prominent. Holds setup, correction
+// actions (undo a mis-tap, reset the board), and sign out.
 export function BoardMenu({
+  onSetup,
+  onHistory,
   onUndoLast,
   onResetBoard,
   onSignOut,
@@ -63,6 +67,23 @@ export function BoardMenu({
           role="menu"
           className="absolute right-0 top-full z-10 mt-1 w-52 overflow-hidden rounded-xl border border-black/10 bg-surface-raised py-1 shadow-lg"
         >
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAndClose(onSetup)}
+            className="block w-full px-4 py-2.5 text-left text-sm text-ink transition-colors hover:bg-black/5"
+          >
+            Chores &amp; stickers
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => runAndClose(onHistory)}
+            className="block w-full px-4 py-2.5 text-left text-sm text-ink transition-colors hover:bg-black/5"
+          >
+            History
+          </button>
+          <div className="my-1 border-t border-black/5" />
           <button
             type="button"
             role="menuitem"

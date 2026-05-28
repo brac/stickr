@@ -108,6 +108,45 @@ export async function clearChapterStickers(chapterId: string): Promise<void> {
   }
 }
 
+export interface PastChapter {
+  id: string
+  kid_id: string
+  started_at: string
+  ended_at: string
+  reward_name: string | null
+}
+
+export async function fetchPastChapters(kidId: string): Promise<PastChapter[]> {
+  const { data, error } = await supabase
+    .from('board_chapter')
+    .select(`
+      id, kid_id, started_at, ended_at,
+      redemption_event (
+        reward_tier ( name )
+      )
+    `)
+    .eq('kid_id', kidId)
+    .not('ended_at', 'is', null)
+    .order('started_at', { ascending: false })
+  if (error) {
+    throw error
+  }
+  return (data ?? []).map((row) => {
+    const redemption = Array.isArray(row.redemption_event)
+      ? row.redemption_event[0]
+      : row.redemption_event
+    const tier = redemption?.reward_tier
+    const rewardName = Array.isArray(tier) ? (tier[0]?.name ?? null) : (tier?.name ?? null)
+    return {
+      id: row.id,
+      kid_id: row.kid_id,
+      started_at: row.started_at,
+      ended_at: row.ended_at as string,
+      reward_name: rewardName,
+    }
+  })
+}
+
 export async function fetchRewardTiers(householdId: string): Promise<RewardTier[]> {
   const { data, error } = await supabase
     .from('reward_tier')
