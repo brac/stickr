@@ -57,7 +57,7 @@ export function jostle(el: HTMLElement, intensity: number): void {
   if (!el || typeof el.animate !== 'function') return
   try {
     // Peak wobble angle scales with how close the neighbour is.
-    const d = 9 * intensity
+    const d = 22 * intensity
     const s = 1 + 0.04 * intensity
 
     el.animate(
@@ -68,7 +68,7 @@ export function jostle(el: HTMLElement, intensity: number): void {
         { transform: `rotate(${0.25 * d}deg) scale(1)` },
         { transform: 'rotate(0deg) scale(1)' },
       ],
-      { duration: 300, easing: 'ease-out' },
+      { duration: 900, easing: 'ease-out' },
     )
   } catch {
     // The jostle is non-essential — never let a DOM/animation hiccup surface.
