@@ -38,8 +38,13 @@ function pluralStickers(amount: number): string {
 }
 
 Deno.serve(async (req) => {
-  // Authenticate the webhook caller via shared secret (when configured).
-  if (WEBHOOK_SECRET && req.headers.get('x-webhook-secret') !== WEBHOOK_SECRET) {
+  // Authenticate the webhook caller via shared secret. With verify_jwt=false on
+  // this function the secret is the ONLY caller gate, so fail CLOSED if it's
+  // unset — otherwise anyone who can reach the URL could trigger pushes.
+  if (!WEBHOOK_SECRET) {
+    return new Response('Webhook secret not configured', { status: 500 })
+  }
+  if (req.headers.get('x-webhook-secret') !== WEBHOOK_SECRET) {
     return new Response('Unauthorized', { status: 401 })
   }
   if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
