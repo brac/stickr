@@ -237,8 +237,95 @@ describe.skipIf(!RUN)('cross-household RLS isolation', () => {
     expect(data ?? []).toHaveLength(0) // A sees none of B's
   })
 
-  // Realtime enforces the same SELECT policies (Postgres Changes). Proving it
-  // needs a subscribe-as-A / mutate-as-B harness with a websocket; tracked here
-  // so the audit's Results checklist has a home. See docs/SECURITY-RLS.md.
-  it.todo('Realtime: A receives no changefeed events from B\'s mutations')
+  // Realtime enforces the same SELECT policies (Postgres Changes). A subscribes
+  // to INSERTs on sticker_event (replica identity full, in supabase_realtime),
+  // then B performs a legitimate in-household insert that DOES fire B's own
+  // changefeed. If RLS leaks, A's socket would receive B's row. See
+  // docs/SECURITY-RLS.md.
+  const REALTIME_SETTLE_MS = 3000 // bounded wait for any leaked event to arrive
+
+  it('Realtime: A receives no changefeed events from B\'s mutations', async () => {
+    // jsdom replaces globalThis.Event with its own class, but Node's undici
+    // WebSocket (the global WS realtime-js uses here) dispatches events on a
+    // native EventTarget, which rejects a jsdom Event with ERR_INVALID_ARG_TYPE
+    // on connect/close. Recover the native Event (an AbortSignal 'abort' event
+    // is a native Event regardless of the jsdom clobber) and install it for the
+    // duration of the socket's life, then restore jsdom's Event in finally so
+    // no other test is affected.
+    const jsdomEvent = globalThis.Event
+    let nativeEvent: typeof Event = jsdomEvent
+    const ac = new AbortController()
+    ac.signal.addEventListener('abort', (e) => {
+      nativeEvent = (e.constructor as typeof Event)
+    })
+    ac.abort()
+    globalThis.Event = nativeEvent
+
+    const received: Array<Record<string, unknown>> = []
+    const channel = A.client
+      .channel(`rls-rt-${crypto.randomUUID()}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'sticker_event' },
+        (payload) => {
+          received.push(payload.new as Record<string, unknown>)
+        },
+      )
+
+    try {
+      await new Promise<void>((resolve, reject) => {
+        channel.subscribe((status) => {
+          if (status === 'SUBSCRIBED') resolve()
+          if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+            reject(new Error(`subscribe failed: ${status}`))
+          }
+        })
+      })
+
+      // Positive control: an in-household insert by A MUST arrive on A's socket.
+      // Without this, a silently-dead channel (disconnect after SUBSCRIBED, a
+      // Realtime misconfig, or a transient hiccup) would leave `received` empty
+      // and the isolation assertion below would pass while proving nothing. The
+      // control makes the negative assertion meaningful: we only trust "A got
+      // none of B's events" once we've confirmed A's channel actually delivers.
+      const { data: aParent } = await A.client.from('parent').select('id').single()
+      const { error: aInsErr } = await A.client.from('sticker_event').insert({
+        kid_id: A.kidId,
+        chapter_id: A.chapterId,
+        chore_id: A.choreId,
+        amount: 1,
+        awarded_by: aParent!.id,
+      })
+      expect(aInsErr).toBeNull()
+
+      // B writes a real, in-household sticker_event so the changefeed fires on
+      // B's side. A must not receive it through the shared Realtime socket.
+      const { data: bParent } = await B.client.from('parent').select('id').single()
+      const { error: insErr } = await B.client.from('sticker_event').insert({
+        kid_id: B.kidId,
+        chapter_id: B.chapterId,
+        chore_id: B.choreId,
+        amount: 1,
+        awarded_by: bParent!.id,
+      })
+      expect(insErr).toBeNull()
+
+      // Bounded settle: enough for a leaked event to arrive, never open-ended.
+      // NOTE: this is a time-bounded negative — on a heavily loaded broker a
+      // leak could in theory arrive after the window. The positive control
+      // above guarantees we are not merely observing a dead channel.
+      await new Promise((r) => setTimeout(r, REALTIME_SETTLE_MS))
+
+      // Positive control fired → A's channel is live and delivering.
+      const aKidEvents = received.filter((r) => r.kid_id === A.kidId)
+      expect(aKidEvents.length).toBeGreaterThan(0)
+
+      // Isolation: despite a live channel, A received none of B's events.
+      const bKidEvents = received.filter((r) => r.kid_id === B.kidId)
+      expect(bKidEvents).toHaveLength(0)
+    } finally {
+      await A.client.removeChannel(channel)
+      globalThis.Event = jsdomEvent
+    }
+  }, 20_000)
 })
