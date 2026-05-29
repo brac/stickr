@@ -39,9 +39,9 @@ describe('haptics', () => {
       expect(vibrate).toHaveBeenCalledWith(10)
     })
 
-    it('redeem fires a celebratory triple-tap pattern', () => {
+    it('redeem fires a longer celebratory pattern', () => {
       vibrateRedeem()
-      expect(vibrate).toHaveBeenCalledWith([0, 28, 40, 28])
+      expect(vibrate).toHaveBeenCalledWith([0, 30, 40, 30, 40, 60])
     })
 
     it('swallows errors thrown by vibrate (e.g. called outside a gesture)', () => {

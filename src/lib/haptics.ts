@@ -7,8 +7,9 @@
 
 const AWARD_PATTERN = 18
 const UNDO_PATTERN = 10
-// A little triple-tap celebration for the redemption peak.
-const REDEEM_PATTERN = [0, 28, 40, 28]
+// A longer, building celebration for the redemption peak — the emotional high
+// point of the app, so it earns a bigger buzz than the award tick.
+const REDEEM_PATTERN = [0, 30, 40, 30, 40, 60]
 
 function buzz(pattern: number | number[]): void {
   if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') {

@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react'
 import type { RewardTier } from '../lib/types'
 
 interface ProgressBarProps {
@@ -7,12 +8,29 @@ interface ProgressBarProps {
   onClaimClick?: () => void
 }
 
+// How long the count number holds its punch — comfortably past the ~320ms pulse.
+const COUNT_PUNCH_MS = 320
+
 export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
   const sorted = [...tiers].sort((a, b) => a.threshold - b.threshold)
   const max = sorted[sorted.length - 1]?.threshold ?? 50
   const fillPct = Math.min(total / max, 1) * 100
   const nextTier = sorted.find((t) => t.threshold > total)
   const unlockedCount = sorted.filter((t) => t.threshold <= total).length
+
+  // Pulse the count number when the total climbs. A mount guard skips the first
+  // render so a freshly mounted board doesn't punch. The CSS class is neutralised
+  // under prefers-reduced-motion, so this stays reduced-motion safe.
+  const prevTotalRef = useRef(total)
+  const [punching, setPunching] = useState(false)
+  useEffect(() => {
+    const prevTotal = prevTotalRef.current
+    prevTotalRef.current = total
+    if (total <= prevTotal) return
+    setPunching(true)
+    const timeout = window.setTimeout(() => setPunching(false), COUNT_PUNCH_MS)
+    return () => window.clearTimeout(timeout)
+  }, [total])
 
   return (
     <div className="mt-4">
@@ -32,7 +50,7 @@ export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
       </div>
 
       <div className="mt-2 flex items-baseline justify-between text-sm">
-        <span className="font-medium text-ink">
+        <span className={`inline-block font-medium text-ink${punching ? ' count-punch' : ''}`}>
           {total} {total === 1 ? 'sticker' : 'stickers'}
         </span>
         {nextTier ? (

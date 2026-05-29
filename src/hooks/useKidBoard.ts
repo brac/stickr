@@ -14,6 +14,7 @@ import { enqueueAwards, getQueuedAwards } from '../lib/offlineQueue'
 import { getErrorMessage } from '../lib/errors'
 import { vibrateAward, vibrateRedeem, vibrateUndo } from '../lib/haptics'
 import { celebrateRedemption } from '../lib/celebrate'
+import { flashRedemption } from '../lib/juice'
 import { useToast } from '../components/toast/useToast'
 import type { Kid, Parent, RewardTier, StickerEvent } from '../lib/types'
 
@@ -306,6 +307,7 @@ export function useKidBoard(
         }))
         vibrateRedeem()
         void celebrateRedemption()
+        flashRedemption()
         toast.success(`"${tier.name}" claimed!`)
       } catch (err) {
         toast.error(getErrorMessage(err))

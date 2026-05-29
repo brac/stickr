@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   STICKER_SIZE,
   boardHeight,
@@ -34,6 +34,9 @@ interface StickerBoardProps {
   interactive?: boolean
 }
 
+// How long the board holds its kick nudge — comfortably past the ~280ms animation.
+const BOARD_KICK_MS = 300
+
 export function StickerBoard({
   events,
   layout,
@@ -42,9 +45,25 @@ export function StickerBoard({
   interactive = false,
 }: StickerBoardProps) {
   const height = boardHeight(events.length || 1, layout.rowSize)
+
+  // Kick the board when a new sticker lands. A mount guard skips the initial
+  // 0 -> N population (and history snapshots, which mount once); only a later
+  // increase in events.length kicks. The CSS class is neutralised under
+  // prefers-reduced-motion, so this stays reduced-motion safe.
+  const prevLenRef = useRef(events.length)
+  const [kicking, setKicking] = useState(false)
+  useEffect(() => {
+    const prevLen = prevLenRef.current
+    prevLenRef.current = events.length
+    if (events.length <= prevLen) return
+    setKicking(true)
+    const timeout = window.setTimeout(() => setKicking(false), BOARD_KICK_MS)
+    return () => window.clearTimeout(timeout)
+  }, [events.length])
+
   return (
     <div
-      className="corkboard relative w-full overflow-hidden"
+      className={`corkboard relative w-full overflow-hidden${kicking ? ' board-kick' : ''}`}
       style={{ height }}
       data-testid="sticker-board"
     >
@@ -91,6 +110,9 @@ function Sticker({ seedId, x, y, rotation, artUrl, isNew, interactive }: Sticker
   // everything else gets the gentle pop. Frozen so a later prop change (e.g. the
   // parent clearing newIds) can't retrigger the animation.
   const [entrance] = useState(() => (isNew ? 'sticker-drop' : 'sticker-pop'))
+  // Freeze the impact ring at mount like the entrance, so a later newIds clear
+  // can't retrigger or yank it mid-animation.
+  const [showRing] = useState(() => isNew)
   const style: CSSProperties & Record<'--x' | '--y' | '--rot', string> = {
     width: STICKER_SIZE,
     height: STICKER_SIZE,
@@ -117,6 +139,7 @@ function Sticker({ seedId, x, y, rotation, artUrl, isNew, interactive }: Sticker
       data-testid="sticker"
     >
       {interactive ? <InteractiveArt seedId={seedId}>{art}</InteractiveArt> : art}
+      {showRing && <span className="impact-ring" aria-hidden="true" />}
     </div>
   )
 }

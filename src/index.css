@@ -91,28 +91,106 @@ body {
     opacity: 1;
   }
 }
+/* Exaggerated SLAM with squash-and-stretch. Drops from higher and smaller,
+   overshoots and flattens wide on impact, rebounds tall/narrow, then settles.
+   Transform + opacity only — scaleX/scaleY drive the squash without touching
+   layout-bound properties. */
 @keyframes sticker-drop {
   0% {
-    transform: translate(var(--x), calc(var(--y) - 30px)) rotate(var(--rot))
+    transform: translate(var(--x), calc(var(--y) - 36px)) rotate(var(--rot))
       scale(0.3);
     opacity: 0;
   }
   55% {
-    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(1.2);
+    /* IMPACT: overshoot then horizontal squash — reads wide/flattened. */
+    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(1.22)
+      scaleX(1.18) scaleY(0.8);
     opacity: 1;
   }
-  72% {
-    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(0.93);
+  68% {
+    /* Rebound stretch: slightly tall and narrow. */
+    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scaleX(0.94)
+      scaleY(1.06);
+    opacity: 1;
+  }
+  82% {
+    /* Small settle undershoot. */
+    transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(0.98);
+    opacity: 1;
   }
   100% {
     transform: translate(var(--x), var(--y)) rotate(var(--rot)) scale(1);
     opacity: 1;
   }
 }
+
+/* One-shot expanding ring rendered inside a freshly awarded sticker. The border
+   is static (drawn once); only transform: scale() and opacity animate, so this
+   stays fully compositor-friendly. Warm tone matches the corkboard. */
+.impact-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  border: 2px solid oklch(62% 0.13 65 / 0.85);
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: impact-ring 360ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes impact-ring {
+  0% {
+    transform: scale(0.25);
+    opacity: 0.7;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+
+/* One-shot nudge applied to the .corkboard container when a new sticker lands.
+   translateY only — the board dips and springs back. */
+.board-kick {
+  animation: board-kick 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes board-kick {
+  0% {
+    transform: translateY(0);
+  }
+  45% {
+    transform: translateY(4px);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+/* One-shot scale pulse applied to the sticker-count number when it increases.
+   The count span is permanently inline-block (see ProgressBar) so toggling this
+   class only adds the animation — no box-model change mid-pulse. */
+.count-punch {
+  animation: count-punch 320ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes count-punch {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.28);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .sticker-pop,
-  .sticker-drop {
+  .sticker-drop,
+  .board-kick,
+  .count-punch {
     animation: none;
+  }
+  /* Never show the ring statically — it has no instant equivalent. */
+  .impact-ring {
+    display: none;
   }
 }
 
