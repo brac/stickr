@@ -5,8 +5,19 @@ import type { Kid } from './types'
 
 const BUCKET = 'kid-avatars'
 
-export function kidAvatarUrl(storagePath: string): string {
-  return supabase.storage.from(BUCKET).getPublicUrl(storagePath).data.publicUrl
+// The bucket is private (see the storage-privatization migration), so an
+// avatar is read via a short-lived signed URL rather than a public URL.
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 12
+
+// Mint a signed URL for a kid's avatar. Creating it requires SELECT on the
+// object, so RLS scopes this to the caller's household. Returns null when the
+// path can't be signed (e.g. it was just removed) so callers fall back cleanly.
+export async function signKidAvatarUrl(storagePath: string): Promise<string | null> {
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrl(storagePath, SIGNED_URL_TTL_SECONDS)
+  if (error || !data) return null
+  return data.signedUrl
 }
 
 // Resize/encode the (already background-removed) image, upload it under a unique

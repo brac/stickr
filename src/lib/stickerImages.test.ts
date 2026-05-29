@@ -13,7 +13,7 @@ vi.mock('./imageProcessing', () => ({
 }))
 
 import {
-  stickerImageUrl,
+  signStickerImageUrls,
   fetchStickerImages,
   uploadStickerImage,
   deleteStickerImage,
@@ -23,7 +23,7 @@ import type { StickerImage } from './types'
 
 const upload = vi.fn()
 const remove = vi.fn().mockResolvedValue({ error: null })
-const getPublicUrl = vi.fn()
+const createSignedUrls = vi.fn()
 
 function file(): File {
   return new File(['x'], 'pic.png', { type: 'image/png' })
@@ -33,15 +33,63 @@ beforeEach(() => {
   fromMock.mockReset()
   upload.mockReset().mockResolvedValue({ error: null })
   remove.mockReset().mockResolvedValue({ error: null })
-  getPublicUrl.mockReset()
-  storageFromMock.mockReset().mockReturnValue({ upload, remove, getPublicUrl })
+  createSignedUrls.mockReset()
+  storageFromMock.mockReset().mockReturnValue({ upload, remove, createSignedUrls })
 })
 
-describe('stickerImageUrl', () => {
-  it('returns the public URL for a storage path', () => {
-    getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn/x.webp' } })
-    expect(stickerImageUrl('hh/x.webp')).toBe('https://cdn/x.webp')
-    expect(getPublicUrl).toHaveBeenCalledWith('hh/x.webp')
+describe('signStickerImageUrls', () => {
+  it('signs a batch and maps signed URLs back to image ids', async () => {
+    createSignedUrls.mockResolvedValue({
+      data: [
+        { path: 'hh/a.webp', signedUrl: 'https://cdn/a.webp?token=1', error: null },
+        { path: 'hh/b.webp', signedUrl: 'https://cdn/b.webp?token=2', error: null },
+      ],
+      error: null,
+    })
+
+    const map = await signStickerImageUrls([
+      { id: 'img-a', storage_path: 'hh/a.webp' },
+      { id: 'img-b', storage_path: 'hh/b.webp' },
+    ])
+
+    expect(map).toEqual({
+      'img-a': 'https://cdn/a.webp?token=1',
+      'img-b': 'https://cdn/b.webp?token=2',
+    })
+    expect(createSignedUrls).toHaveBeenCalledWith(
+      ['hh/a.webp', 'hh/b.webp'],
+      expect.any(Number),
+    )
+  })
+
+  it('returns an empty map and skips storage when there are no images', async () => {
+    await expect(signStickerImageUrls([])).resolves.toEqual({})
+    expect(createSignedUrls).not.toHaveBeenCalled()
+  })
+
+  it('omits images whose individual signing failed', async () => {
+    createSignedUrls.mockResolvedValue({
+      data: [
+        { path: 'hh/a.webp', signedUrl: 'https://cdn/a.webp?token=1', error: null },
+        { path: 'hh/b.webp', signedUrl: '', error: 'not found' },
+      ],
+      error: null,
+    })
+
+    const map = await signStickerImageUrls([
+      { id: 'img-a', storage_path: 'hh/a.webp' },
+      { id: 'img-b', storage_path: 'hh/b.webp' },
+    ])
+
+    expect(map).toEqual({ 'img-a': 'https://cdn/a.webp?token=1' })
+  })
+
+  it('throws when the batch sign call errors', async () => {
+    const error = new Error('sign failed')
+    createSignedUrls.mockResolvedValue({ data: null, error })
+    await expect(
+      signStickerImageUrls([{ id: 'img-a', storage_path: 'hh/a.webp' }]),
+    ).rejects.toBe(error)
   })
 })
 

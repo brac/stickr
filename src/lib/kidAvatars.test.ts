@@ -14,7 +14,7 @@ vi.mock('./imageProcessing', () => ({
 }))
 
 import {
-  kidAvatarUrl,
+  signKidAvatarUrl,
   uploadKidAvatar,
   removeKidAvatar,
   setKidAvatarEmoji,
@@ -23,7 +23,7 @@ import type { Kid } from './types'
 
 const upload = vi.fn()
 const remove = vi.fn()
-const getPublicUrl = vi.fn()
+const createSignedUrl = vi.fn()
 
 function file(): File {
   return new File(['x'], 'face.png', { type: 'image/png' })
@@ -48,14 +48,25 @@ beforeEach(() => {
   rpcMock.mockReset().mockResolvedValue({ error: null })
   upload.mockReset().mockResolvedValue({ error: null })
   remove.mockReset().mockResolvedValue({ error: null })
-  getPublicUrl.mockReset()
-  storageFromMock.mockReset().mockReturnValue({ upload, remove, getPublicUrl })
+  createSignedUrl.mockReset()
+  storageFromMock.mockReset().mockReturnValue({ upload, remove, createSignedUrl })
 })
 
-describe('kidAvatarUrl', () => {
-  it('returns the public URL for a storage path', () => {
-    getPublicUrl.mockReturnValue({ data: { publicUrl: 'https://cdn/a.webp' } })
-    expect(kidAvatarUrl('hh-1/kid-1/a.webp')).toBe('https://cdn/a.webp')
+describe('signKidAvatarUrl', () => {
+  it('returns a signed URL for a storage path', async () => {
+    createSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://cdn/a.webp?token=1' },
+      error: null,
+    })
+    await expect(signKidAvatarUrl('hh-1/kid-1/a.webp')).resolves.toBe(
+      'https://cdn/a.webp?token=1',
+    )
+    expect(createSignedUrl).toHaveBeenCalledWith('hh-1/kid-1/a.webp', expect.any(Number))
+  })
+
+  it('returns null when signing fails', async () => {
+    createSignedUrl.mockResolvedValue({ data: null, error: new Error('nope') })
+    await expect(signKidAvatarUrl('hh-1/kid-1/a.webp')).resolves.toBeNull()
   })
 })
 

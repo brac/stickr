@@ -11,7 +11,8 @@ import {
   type BoardDisplayMode,
 } from '../lib/queries'
 import { fetchActiveChores } from '../lib/chores'
-import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
+import { fetchStickerImages } from '../lib/stickerImages'
+import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import {
   getQueuedAwards,
@@ -126,13 +127,7 @@ export function Home() {
     if (online) void flushQueue()
   }, [online, flushQueue])
 
-  const imageUrls = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const image of stickerImages) {
-      map[image.id] = stickerImageUrl(image.storage_path)
-    }
-    return map
-  }, [stickerImages])
+  const imageUrls = useStickerImageUrls(stickerImages)
 
   const choreNames = useMemo(() => {
     const map: Record<string, string> = {}

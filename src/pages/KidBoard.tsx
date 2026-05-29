@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { fetchKids, fetchMyParent, fetchRewardTiers } from '../lib/queries'
-import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
+import { fetchStickerImages } from '../lib/stickerImages'
+import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
@@ -66,13 +67,7 @@ export function KidBoard() {
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
 
-  const imageUrls = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const image of stickerImages) {
-      map[image.id] = stickerImageUrl(image.storage_path)
-    }
-    return map
-  }, [stickerImages])
+  const imageUrls = useStickerImageUrls(stickerImages)
 
   async function toggleFullscreen() {
     try {

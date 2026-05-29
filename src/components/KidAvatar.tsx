@@ -1,4 +1,5 @@
-import { kidAvatarUrl } from '../lib/kidAvatars'
+import { useEffect, useState } from 'react'
+import { signKidAvatarUrl } from '../lib/kidAvatars'
 import type { Kid } from '../lib/types'
 
 // The floor of the fallback chain — used wherever a kid has no photo or emoji.
@@ -34,23 +35,62 @@ export function KidAvatar({
 }: KidAvatarProps) {
   const px = SIZE_PX[size]
 
+  // The bucket is private, so resolve the photo to a short-lived signed URL.
+  // Track which path the signed result belongs to so readiness is derived (no
+  // synchronous setState in the effect): the photo is "ready" only once a result
+  // for the current avatar_path has arrived.
+  const [signed, setSigned] = useState<{ path: string; url: string | null }>({
+    path: '',
+    url: null,
+  })
+
+  useEffect(() => {
+    let active = true
+    const path = kid.avatar_path
+    if (!path) return
+    signKidAvatarUrl(path)
+      .then((url) => {
+        if (active) setSigned({ path, url })
+      })
+      .catch(() => {
+        if (active) setSigned({ path, url: null })
+      })
+    return () => {
+      active = false
+    }
+  }, [kid.avatar_path])
+
   if (kid.avatar_path) {
-    return (
-      <img
-        src={kidAvatarUrl(kid.avatar_path)}
-        alt={kid.name}
-        width={px}
-        height={px}
-        loading="lazy"
-        draggable={false}
-        className="die-cut shrink-0 object-contain"
-        style={{ width: px, height: px }}
-      />
-    )
+    const ready = signed.path === kid.avatar_path
+    if (ready && signed.url) {
+      return (
+        <img
+          src={signed.url}
+          alt={kid.name}
+          width={px}
+          height={px}
+          loading="lazy"
+          draggable={false}
+          className="die-cut shrink-0 object-contain"
+          style={{ width: px, height: px }}
+        />
+      )
+    }
+    if (!ready) {
+      // Photo still signing: hold its space silently — no emoji flash, no CLS.
+      return (
+        <span
+          aria-hidden="true"
+          className="inline-block shrink-0"
+          style={{ width: px, height: px }}
+        />
+      )
+    }
+    // ready && no url → signing failed; fall through to the emoji fallback.
   }
 
-  // No photo: only the setup kid menu shows the emoji placeholder; everywhere
-  // else renders nothing.
+  // No photo (or it failed to sign): only the setup kid menu shows the emoji
+  // placeholder; everywhere else renders nothing.
   if (!allowEmojiFallback) {
     return null
   }

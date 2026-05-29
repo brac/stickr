@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { SetupShell } from '../components/SetupShell'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
@@ -9,7 +9,8 @@ import {
   setChoreActive,
   updateChore,
 } from '../lib/chores'
-import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
+import { fetchStickerImages } from '../lib/stickerImages'
+import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { Chore, StickerImage } from '../lib/types'
@@ -50,13 +51,7 @@ export function ChoreManager() {
     }
   }, [householdId, toast])
 
-  const imageUrls = useMemo(() => {
-    const map: Record<string, string> = {}
-    for (const image of images) {
-      map[image.id] = stickerImageUrl(image.storage_path)
-    }
-    return map
-  }, [images])
+  const imageUrls = useStickerImageUrls(images)
 
   async function reloadChores() {
     if (!householdId) return

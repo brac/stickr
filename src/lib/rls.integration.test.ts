@@ -237,12 +237,89 @@ describe.skipIf(!RUN)('cross-household RLS isolation', () => {
     expect(data ?? []).toHaveLength(0) // A sees none of B's
   })
 
+  // --- Storage isolation (regression for the private-bucket hardening) --------
+  //
+  // Two migrations together close cross-household storage access:
+  //   * 20260529201604 scoped the SELECT policy → list() enforces RLS (anon and
+  //     other households can't ENUMERATE), even on a public bucket.
+  //   * 20260529204729 flips the buckets to public=false → object READS enforce
+  //     RLS too. A public bucket serves bytes via /object/public regardless of
+  //     RLS, so before this a path-holder could still DOWNLOAD any household's
+  //     sticker art / kid-avatar photo. Now reads go through signed URLs that
+  //     only the owning household can mint.
+  //
+  // Seed a REAL object in B's folder so a leak would be observable, then assert
+  // ONLY B can list / download / sign it; A (other household) and anon cannot.
+  // The B-can checks are positive controls so the empty/denied results are real
+  // isolation, not an empty bucket.
+  // 1x1 transparent PNG (both buckets allow image/png) — the bytes are
+  // irrelevant; we only need a real object at a household-scoped path.
+  const PNG_1x1 =
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
+  function pngBytes(): Uint8Array {
+    const bin = atob(PNG_1x1)
+    const arr = new Uint8Array(bin.length)
+    for (let i = 0; i < bin.length; i += 1) arr[i] = bin.charCodeAt(i)
+    return arr
+  }
+
+  it.each(['sticker-images', 'kid-avatars'])('Storage: only B can list/read/sign its own objects in %s (anon + A cannot)', async (STORAGE_BUCKET) => {
+    const objectPath = `${B.householdId}/rls-${crypto.randomUUID()}.png`
+    const { error: upErr } = await B.client.storage
+      .from(STORAGE_BUCKET)
+      .upload(objectPath, pngBytes(), { contentType: 'image/png', upsert: true })
+    expect(upErr).toBeNull()
+
+    const anon = createClient(SUPABASE_URL!, ANON!, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    })
+    const fileName = objectPath.split('/').pop()!
+
+    try {
+      // Positive control: B (owner) can list, download, and sign its own object —
+      // proving the operations work at all, so the denials below are real.
+      const { data: bList } = await B.client.storage.from(STORAGE_BUCKET).list(B.householdId)
+      expect((bList ?? []).some((o) => o.name === fileName)).toBe(true)
+      const { data: bDl } = await B.client.storage.from(STORAGE_BUCKET).download(objectPath)
+      expect(bDl).not.toBeNull()
+      const { data: bSign } = await B.client.storage.from(STORAGE_BUCKET).createSignedUrl(objectPath, 60)
+      expect(bSign?.signedUrl).toBeTruthy()
+
+      // Isolation — A (authenticated, other household): list, download, and
+      // sign of B's object must all be denied/empty.
+      const { data: aList } = await A.client.storage.from(STORAGE_BUCKET).list(B.householdId)
+      expect(aList ?? []).toHaveLength(0)
+      const { data: aDl, error: aDlErr } = await A.client.storage.from(STORAGE_BUCKET).download(objectPath)
+      expect(aDl).toBeNull()
+      expect(aDlErr).not.toBeNull()
+      const { data: aSign, error: aSignErr } = await A.client.storage
+        .from(STORAGE_BUCKET)
+        .createSignedUrl(objectPath, 60)
+      expect(aSign).toBeNull()
+      expect(aSignErr).not.toBeNull()
+
+      // Isolation — anon (unauthenticated): cannot enumerate the bucket root or
+      // B's folder, and cannot download. Both error and empty mean "denied".
+      const { data: anonRoot } = await anon.storage.from(STORAGE_BUCKET).list()
+      expect(anonRoot ?? []).toHaveLength(0)
+      const { data: anonFolder } = await anon.storage.from(STORAGE_BUCKET).list(B.householdId)
+      expect(anonFolder ?? []).toHaveLength(0)
+      const { data: anonDl, error: anonDlErr } = await anon.storage.from(STORAGE_BUCKET).download(objectPath)
+      expect(anonDl).toBeNull()
+      expect(anonDlErr).not.toBeNull()
+    } finally {
+      // Storage objects don't cascade from auth-user deletion — clean up.
+      await service.storage.from(STORAGE_BUCKET).remove([objectPath])
+    }
+  }, 20_000)
+
   // Realtime enforces the same SELECT policies (Postgres Changes). A subscribes
   // to INSERTs on sticker_event (replica identity full, in supabase_realtime),
   // then B performs a legitimate in-household insert that DOES fire B's own
   // changefeed. If RLS leaks, A's socket would receive B's row. See
   // docs/SECURITY-RLS.md.
-  const REALTIME_SETTLE_MS = 3000 // bounded wait for any leaked event to arrive
+  const REALTIME_LIVE_TIMEOUT_MS = 10_000 // max wait for A's OWN event (channel live)
+  const REALTIME_SETTLE_MS = 3000 // bounded extra wait for any leaked event to arrive
 
   it('Realtime: A receives no changefeed events from B\'s mutations', async () => {
     // jsdom replaces globalThis.Event with its own class, but Node's undici
@@ -298,6 +375,14 @@ describe.skipIf(!RUN)('cross-household RLS isolation', () => {
       })
       expect(aInsErr).toBeNull()
 
+      // Poll (not a fixed sleep) until A's own event arrives, so the control is
+      // robust to broker latency under load rather than racing a 3s window.
+      const liveDeadline = Date.now() + REALTIME_LIVE_TIMEOUT_MS
+      while (!received.some((r) => r.kid_id === A.kidId) && Date.now() < liveDeadline) {
+        await new Promise((r) => setTimeout(r, 100))
+      }
+      expect(received.some((r) => r.kid_id === A.kidId)).toBe(true) // channel proven live
+
       // B writes a real, in-household sticker_event so the changefeed fires on
       // B's side. A must not receive it through the shared Realtime socket.
       const { data: bParent } = await B.client.from('parent').select('id').single()
@@ -310,15 +395,10 @@ describe.skipIf(!RUN)('cross-household RLS isolation', () => {
       })
       expect(insErr).toBeNull()
 
-      // Bounded settle: enough for a leaked event to arrive, never open-ended.
-      // NOTE: this is a time-bounded negative — on a heavily loaded broker a
-      // leak could in theory arrive after the window. The positive control
-      // above guarantees we are not merely observing a dead channel.
+      // The channel is proven live; give any leaked B event a bounded window to
+      // arrive, then assert none did. (A leak could in theory arrive later on a
+      // heavily loaded broker, but the live control rules out a dead channel.)
       await new Promise((r) => setTimeout(r, REALTIME_SETTLE_MS))
-
-      // Positive control fired → A's channel is live and delivering.
-      const aKidEvents = received.filter((r) => r.kid_id === A.kidId)
-      expect(aKidEvents.length).toBeGreaterThan(0)
 
       // Isolation: despite a live channel, A received none of B's events.
       const bKidEvents = received.filter((r) => r.kid_id === B.kidId)

@@ -6,7 +6,7 @@ import {
   fetchPastChapters,
   type PastChapter,
 } from '../lib/queries'
-import { fetchStickerImages, stickerImageUrl } from '../lib/stickerImages'
+import { fetchStickerImages, signStickerImageUrls } from '../lib/stickerImages'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { Kid, StickerEvent } from '../lib/types'
@@ -134,10 +134,8 @@ export function History() {
           fetchStickerImages(myParent.household_id),
         ])
         if (!active) return
-        const map: Record<string, string> = {}
-        for (const image of images) {
-          map[image.id] = stickerImageUrl(image.storage_path)
-        }
+        const map = await signStickerImageUrls(images)
+        if (!active) return
         setImageUrls(map)
         setKids(theKids)
         setSelectedKidId(theKids[0]?.id ?? null)

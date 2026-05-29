@@ -29,14 +29,23 @@ export default defineConfig({
         importScripts: ['/push-sw.js'],
         runtimeCaching: [
           {
-            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/.*/i,
+            // Buckets are private, so images load via signed URLs
+            // (/object/sign/...?token=). Match those as well as any legacy
+            // public URLs. A signed URL is minted once per load and reused, so
+            // the same string is cacheable within its validity window.
+            urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/(public|sign)\/.*/i,
             handler: 'CacheFirst',
             options: {
               cacheName: 'supabase-images',
               expiration: {
                 maxEntries: 100,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
+                // Keep at/under the 12h signed-URL TTL so a cache miss never
+                // falls through to the network with an already-expired token.
+                maxAgeSeconds: 60 * 60 * 12,
               },
+              // Never store an auth failure (e.g. an expired/re-signed token
+              // returning 4xx) in place of the image.
+              cacheableResponse: { statuses: [0, 200] },
             },
           },
         ],

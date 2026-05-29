@@ -5,10 +5,41 @@ import type { StickerImage } from './types'
 
 const BUCKET = 'sticker-images'
 
+// The bucket is private (see the storage-privatization migration), so reads go
+// through short-lived signed URLs instead of public URLs. 12h covers a long
+// wall-mounted / kid-board session; the URL is signed once per load and reused.
+const SIGNED_URL_TTL_SECONDS = 60 * 60 * 12
+
 type StickerImageInsert = Database['public']['Tables']['sticker_image']['Insert']
 
-export function stickerImageUrl(storagePath: string): string {
-  return supabase.storage.from(BUCKET).getPublicUrl(storagePath).data.publicUrl
+// Mint signed display URLs for a set of sticker images in one batch request,
+// keyed by image.id for the `imageUrls` maps the boards consume. Creating a
+// signed URL requires SELECT on the object, so RLS still scopes this to the
+// caller's household. Images that fail to sign are simply omitted.
+export async function signStickerImageUrls(
+  images: ReadonlyArray<Pick<StickerImage, 'id' | 'storage_path'>>,
+): Promise<Record<string, string>> {
+  if (images.length === 0) return {}
+  const { data, error } = await supabase.storage
+    .from(BUCKET)
+    .createSignedUrls(
+      images.map((image) => image.storage_path),
+      SIGNED_URL_TTL_SECONDS,
+    )
+  if (error) {
+    throw error
+  }
+  const urlByPath = new Map(
+    (data ?? [])
+      .filter((entry) => entry.signedUrl && !entry.error)
+      .map((entry) => [entry.path, entry.signedUrl]),
+  )
+  const map: Record<string, string> = {}
+  for (const image of images) {
+    const url = urlByPath.get(image.storage_path)
+    if (url) map[image.id] = url
+  }
+  return map
 }
 
 export async function fetchStickerImages(

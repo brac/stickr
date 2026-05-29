@@ -5,9 +5,9 @@ import { useMyParent } from '../hooks/useMyParent'
 import {
   deleteStickerImage,
   fetchStickerImages,
-  stickerImageUrl,
   uploadStickerImage,
 } from '../lib/stickerImages'
+import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { makeStickerCutout, type StickerTreatment } from '../lib/imageProcessing'
 import { getErrorMessage } from '../lib/errors'
 import { prefersWebcamCapture } from '../lib/webcam'
@@ -25,6 +25,7 @@ export function StickerLibrary() {
   const { parent, loading } = useMyParent()
   const toast = useToast()
   const [images, setImages] = useState<StickerImage[]>([])
+  const imageUrls = useStickerImageUrls(images)
   const [busy, setBusy] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -220,12 +221,19 @@ export function StickerLibrary() {
               key={image.id}
               className="group relative aspect-square rounded-xl border border-black/10 bg-surface-raised p-2"
             >
-              <img
-                src={stickerImageUrl(image.storage_path)}
-                alt={image.label ?? 'Sticker'}
-                className="h-full w-full object-contain"
-                draggable={false}
-              />
+              {imageUrls[image.id] ? (
+                <img
+                  src={imageUrls[image.id]}
+                  alt={image.label ?? 'Sticker'}
+                  className="h-full w-full object-contain"
+                  draggable={false}
+                />
+              ) : (
+                <div
+                  className="h-full w-full animate-pulse rounded-lg bg-black/5"
+                  aria-hidden="true"
+                />
+              )}
               <button
                 type="button"
                 aria-label="Delete sticker"
