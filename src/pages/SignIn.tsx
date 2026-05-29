@@ -90,7 +90,7 @@ export function SignIn() {
             type="password"
             autoComplete={mode === 'signin' ? 'current-password' : 'new-password'}
             required
-            minLength={6}
+            minLength={mode === 'signup' ? 8 : undefined}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="mt-1 w-full rounded-lg border border-black/10 bg-white px-3 py-2.5 text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"

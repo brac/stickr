@@ -1,0 +1,52 @@
+name: CI
+
+# Quality gates on every PR + push to main: lint, typecheck, build, unit tests.
+#
+# Deploys are NOT handled here — Vercel's GitHub integration auto-deploys
+# (push to main → production at stickr.brac.dev, PR → preview). See
+# docs/DEPLOYMENT.md. To make a red build block the deploy, set this `quality`
+# check as a required status check on `main` in GitHub branch protection.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# One run per ref; cancel superseded runs (a new push supersedes an in-flight one).
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Typecheck · Lint · Test · Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      # `npm run build` runs `tsc -b && vite build`, so this covers typecheck too.
+      # Dummy VITE_* keep any build-time env reference defined; this artifact is a
+      # gate only — Vercel does the real, deployed build with the project's env.
+      - name: Typecheck + build
+        run: npm run build
+        env:
+          VITE_SUPABASE_URL: http://localhost:54321
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+
+      - name: Unit tests
+        run: npm run test
