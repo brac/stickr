@@ -142,6 +142,19 @@ body {
   }
 }
 
+/* Die-cut sticker edge: a white border that hugs the cutout's alpha silhouette
+   (chained drop-shadows fill the diagonals), plus a soft lift so it pops off a
+   white background. Used for background-removed photo avatars. */
+.die-cut {
+  --die-cut-width: 2px;
+  filter:
+    drop-shadow(var(--die-cut-width) 0 0 #fff)
+    drop-shadow(calc(-1 * var(--die-cut-width)) 0 0 #fff)
+    drop-shadow(0 var(--die-cut-width) 0 #fff)
+    drop-shadow(0 calc(-1 * var(--die-cut-width)) 0 #fff)
+    drop-shadow(0 2px 3px oklch(28% 0.05 60 / 0.3));
+}
+
 /* Toasts slide in from the top edge. Compositor-friendly. */
 .toast-item {
   animation: toast-in 200ms cubic-bezier(0.16, 1, 0.3, 1) both;

@@ -130,6 +130,8 @@ export type Database = {
       }
       kid: {
         Row: {
+          avatar_emoji: string | null
+          avatar_path: string | null
           created_at: string
           current_balance: number
           current_chapter_id: string | null
@@ -138,6 +140,8 @@ export type Database = {
           name: string
         }
         Insert: {
+          avatar_emoji?: string | null
+          avatar_path?: string | null
           created_at?: string
           current_balance?: number
           current_chapter_id?: string | null
@@ -146,6 +150,8 @@ export type Database = {
           name: string
         }
         Update: {
+          avatar_emoji?: string | null
+          avatar_path?: string | null
           created_at?: string
           current_balance?: number
           current_chapter_id?: string | null
@@ -480,6 +486,14 @@ export type Database = {
       regenerate_join_code: { Args: never; Returns: string }
       set_board_layout: {
         Args: { p_layout: string }
+        Returns: undefined
+      }
+      set_kid_avatar_emoji: {
+        Args: { p_kid_id: string; p_emoji: string | null }
+        Returns: undefined
+      }
+      set_kid_avatar_path: {
+        Args: { p_kid_id: string; p_path: string | null }
         Returns: undefined
       }
       update_household_name: {

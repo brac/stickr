@@ -5,6 +5,8 @@ import { useMyParent } from '../hooks/useMyParent'
 import { createKid, fetchKids } from '../lib/queries'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
+import { KidAvatar } from '../components/KidAvatar'
+import { KidAvatarEditor } from '../components/KidAvatarEditor'
 import type { Kid } from '../lib/types'
 
 export function KidManager() {
@@ -14,6 +16,12 @@ export function KidManager() {
   const [adding, setAdding] = useState(false)
   const [name, setName] = useState('')
   const [saving, setSaving] = useState(false)
+  const [editingKidId, setEditingKidId] = useState<string | null>(null)
+
+  // Patch one kid in place (used by the avatar editor for live updates).
+  function patchKid(kidId: string, patch: Partial<Kid>) {
+    setKids((prev) => prev.map((k) => (k.id === kidId ? { ...k, ...patch } : k)))
+  }
 
   const householdId = parent?.household_id
 
@@ -58,6 +66,8 @@ export function KidManager() {
   if (loading) {
     return <FullScreenSpinner />
   }
+
+  const editingKid = kids.find((k) => k.id === editingKidId) ?? null
 
   return (
     <SetupShell title="Kids" backTo="/setup">
@@ -113,9 +123,7 @@ export function KidManager() {
             key={kid.id}
             className="flex items-center gap-3 rounded-xl border border-black/10 bg-surface-raised p-3"
           >
-            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-accent/10 text-lg">
-              🧒
-            </span>
+            <KidAvatar kid={kid} size="md" />
             <span className="min-w-0 flex-1 truncate font-medium text-ink">
               {kid.name}
             </span>
@@ -123,6 +131,13 @@ export function KidManager() {
               {kid.current_balance}{' '}
               {kid.current_balance === 1 ? 'sticker' : 'stickers'}
             </span>
+            <button
+              type="button"
+              onClick={() => setEditingKidId(kid.id)}
+              className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-black/5"
+            >
+              Photo
+            </button>
           </li>
         ))}
         {kids.length === 0 && (
@@ -131,6 +146,14 @@ export function KidManager() {
           </p>
         )}
       </ul>
+
+      {editingKid && (
+        <KidAvatarEditor
+          kid={editingKid}
+          onClose={() => setEditingKidId(null)}
+          onUpdated={(patch) => patchKid(editingKid.id, patch)}
+        />
+      )}
     </SetupShell>
   )
 }

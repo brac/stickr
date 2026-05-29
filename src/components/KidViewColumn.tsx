@@ -3,6 +3,7 @@ import { useBoardLayout } from '../hooks/useBoardLayout'
 import { useKidBoard } from '../hooks/useKidBoard'
 import { StickerBoard } from './StickerBoard'
 import { ProgressBar } from './ProgressBar'
+import { KidAvatar } from './KidAvatar'
 import type { Kid, Parent, RewardTier } from '../lib/types'
 
 interface KidViewColumnProps {
@@ -35,7 +36,8 @@ export function KidViewColumn({
 
   return (
     <section className="flex min-w-0 flex-1 flex-col">
-      <h2 className="text-center text-4xl font-bold tracking-tight text-ink sm:text-5xl">
+      <h2 className="flex items-center justify-center gap-3 text-4xl font-bold tracking-tight text-ink sm:text-5xl">
+        <KidAvatar kid={board.kid} size="lg" />
         {board.kid.name}
       </h2>
       <p className="mt-1 text-center text-xl font-semibold text-accent-strong">

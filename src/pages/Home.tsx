@@ -30,6 +30,7 @@ import type {
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { BoardMenu } from '../components/BoardMenu'
 import { KidColumn, type KidColumnApi } from '../components/KidColumn'
+import { KidAvatar } from '../components/KidAvatar'
 import {
   CustomAwardModal,
   type CustomAwardInput,
@@ -249,12 +250,13 @@ export function Home() {
                   role="tab"
                   aria-selected={isSelected}
                   onClick={() => setSelectedKidId(k.id)}
-                  className={`shrink-0 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`flex shrink-0 items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                     isSelected
                       ? 'bg-surface-raised text-ink shadow-sm'
                       : 'text-ink-muted'
                   }`}
                 >
+                  <KidAvatar kid={k} size="sm" />
                   {k.name}
                 </button>
               )

@@ -3,6 +3,7 @@ import { useBoardLayout } from '../hooks/useBoardLayout'
 import { useKidBoard, type AwardParams } from '../hooks/useKidBoard'
 import { StickerBoard } from './StickerBoard'
 import { ProgressBar } from './ProgressBar'
+import { KidAvatar } from './KidAvatar'
 import { RedemptionSheet } from './RedemptionSheet'
 import { TodayLog } from './TodayLog'
 import type { Kid, Parent, RewardTier } from '../lib/types'
@@ -55,7 +56,8 @@ export function KidColumn({
 
   return (
     <section className="min-w-0 flex-1">
-      <p className="text-center text-sm uppercase tracking-[0.2em] text-ink-muted">
+      <p className="flex items-center justify-center gap-2 text-sm uppercase tracking-[0.2em] text-ink-muted">
+        <KidAvatar kid={board.kid} size="sm" />
         {board.kid.name}'s board
       </p>
       <div ref={boardRef} className="mt-3 w-full">
