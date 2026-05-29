@@ -40,19 +40,45 @@ function json(body: unknown, status = 200): Response {
   })
 }
 
-// Remove every object under "{householdId}/" in each household bucket.
-// Layout is flat one level deep, so a single list() per bucket suffices.
+// Recursively collect every OBJECT path under a prefix. Storage layouts differ
+// per bucket — sticker-images is flat ("{household}/{uuid}") but kid-avatars
+// nests a level ("{household}/{kid}/{uuid}"), so a single list() of the
+// household prefix returns the kid *folders*, not the files. supabase-js
+// surfaces a folder/prefix as an entry with `id === null` (no metadata); a real
+// object has a non-null id. Recurse into prefixes so we never leave a file
+// orphaned (Storage isn't touched by the Postgres cascade).
+async function listObjectPaths(
+  admin: SupabaseClient,
+  bucket: string,
+  prefix: string,
+): Promise<string[]> {
+  const { data: entries, error } = await admin.storage
+    .from(bucket)
+    .list(prefix, { limit: 1000 })
+  if (error) throw new Error(`Failed to list ${bucket}/${prefix}: ${error.message}`)
+
+  const paths: string[] = []
+  for (const entry of entries ?? []) {
+    const fullPath = `${prefix}/${entry.name}`
+    if (entry.id === null) {
+      // A prefix/"folder" — descend into it.
+      paths.push(...(await listObjectPaths(admin, bucket, fullPath)))
+    } else {
+      paths.push(fullPath)
+    }
+  }
+  return paths
+}
+
+// Remove every object under "{householdId}/" in each household bucket, at any
+// depth (flat sticker images AND nested kid avatars).
 async function purgeHouseholdStorage(
   admin: SupabaseClient,
   householdId: string,
 ): Promise<void> {
   for (const bucket of HOUSEHOLD_BUCKETS) {
-    const { data: files, error } = await admin.storage
-      .from(bucket)
-      .list(householdId, { limit: 1000 })
-    if (error) throw new Error(`Failed to list ${bucket}: ${error.message}`)
-    if (files && files.length > 0) {
-      const paths = files.map((file) => `${householdId}/${file.name}`)
+    const paths = await listObjectPaths(admin, bucket, householdId)
+    if (paths.length > 0) {
       const { error: removeError } = await admin.storage.from(bucket).remove(paths)
       if (removeError) {
         throw new Error(`Failed to clear ${bucket}: ${removeError.message}`)
