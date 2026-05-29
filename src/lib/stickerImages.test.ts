@@ -18,6 +18,7 @@ import {
   uploadStickerImage,
   deleteStickerImage,
 } from './stickerImages'
+import { processStickerImage } from './imageProcessing'
 import type { StickerImage } from './types'
 
 const upload = vi.fn()
@@ -76,6 +77,21 @@ describe('uploadStickerImage', () => {
       storage_path: uploadedPath,
       label: 'Gold star',
     })
+  })
+
+  it('uploads as PNG when the browser falls back from WebP (iOS Safari)', async () => {
+    // canvas.toBlob can't encode WebP on iOS Safari, so it hands back a PNG.
+    vi.mocked(processStickerImage).mockResolvedValueOnce(
+      new Blob(['x'], { type: 'image/png' }),
+    )
+    fromMock.mockReturnValue(queryResult({ data: { id: 'img-1' }, error: null }))
+
+    await uploadStickerImage({ file: file(), householdId: 'hh-1', label: 'Photo' })
+
+    const uploadedPath = upload.mock.calls[0][0] as string
+    const uploadOptions = upload.mock.calls[0][2] as { contentType: string }
+    expect(uploadedPath).toMatch(/^hh-1\/.*\.png$/)
+    expect(uploadOptions.contentType).toBe('image/png')
   })
 
   it('stores a null label when the label is blank', async () => {

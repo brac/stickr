@@ -31,11 +31,17 @@ export async function uploadStickerImage(args: {
   label: string
 }): Promise<StickerImage> {
   const blob = await processStickerImage(args.file)
-  const path = `${args.householdId}/${crypto.randomUUID()}.webp`
+  // canvas.toBlob falls back to PNG when a browser can't encode WebP (notably
+  // iOS Safari), so upload the type we actually produced rather than assuming
+  // WebP. supabase-js uploads a Blob as multipart and takes its content type
+  // from the blob itself, so the path extension must match too.
+  const contentType = blob.type === 'image/webp' ? 'image/webp' : 'image/png'
+  const ext = contentType === 'image/webp' ? 'webp' : 'png'
+  const path = `${args.householdId}/${crypto.randomUUID()}.${ext}`
 
   const { error: uploadError } = await supabase.storage
     .from(BUCKET)
-    .upload(path, blob, { contentType: 'image/webp', upsert: false })
+    .upload(path, blob, { contentType, upsert: false })
   if (uploadError) {
     throw uploadError
   }
