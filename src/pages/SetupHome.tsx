@@ -1,5 +1,6 @@
 import { Link } from 'react-router-dom'
 import { SetupShell } from '../components/SetupShell'
+import { InstallPrompt } from '../components/InstallPrompt'
 
 const LINKS = [
   {
@@ -46,6 +47,8 @@ export function SetupHome() {
           </Link>
         ))}
       </nav>
+
+      <InstallPrompt />
     </SetupShell>
   )
 }

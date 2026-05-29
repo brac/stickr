@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { supabase } from '../lib/supabase'
 import { getErrorMessage } from '../lib/errors'
+import { InstallPrompt } from '../components/InstallPrompt'
 
 type Mode = 'signin' | 'signup'
 
@@ -125,6 +126,8 @@ export function SignIn() {
             {mode === 'signin' ? 'Sign up' : 'Sign in'}
           </button>
         </p>
+
+        <InstallPrompt />
       </div>
     </main>
   )
