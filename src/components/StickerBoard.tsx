@@ -226,9 +226,10 @@ function Sticker({
 
 // How many sparkle dots a freshly awarded sticker flings outward.
 const SPARKLE_COUNT = 6
-// Outward fling distance range (px) for sparkle dots.
-const SPARKLE_MIN_DIST = 18
-const SPARKLE_MAX_DIST = 34
+// Outward fling distance range (px) for sparkle dots — flung well clear of the
+// sticker so the burst reads at a glance.
+const SPARKLE_MIN_DIST = 54
+const SPARKLE_MAX_DIST = 102
 
 // Landing sparkles: a few dots fling outward and fade behind the sticker art.
 // Vectors are seeded from the event id (via hashStringToSeed) so the burst is
