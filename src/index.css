@@ -146,7 +146,7 @@ body {
    (chained drop-shadows fill the diagonals), plus a soft lift so it pops off a
    white background. Used for background-removed photo avatars. */
 .die-cut {
-  --die-cut-width: 2px;
+  --die-cut-width: 20px;
   filter:
     drop-shadow(var(--die-cut-width) 0 0 #fff)
     drop-shadow(calc(-1 * var(--die-cut-width)) 0 0 #fff)
