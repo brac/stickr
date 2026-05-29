@@ -7,6 +7,13 @@ const MAX_INPUT_BYTES = 15 * 1024 * 1024
 const OUTPUT_TYPE = 'image/webp'
 const OUTPUT_QUALITY = 0.9
 
+// Autocrop tuning. A pixel counts as "visible" once its alpha clears the
+// threshold (keeps faint anti-aliased fringe from inflating the box), and the
+// crop keeps a little proportional breathing room so the subject isn't flush
+// against the sticker edge.
+const ALPHA_THRESHOLD = 8
+const CROP_PADDING_RATIO = 0.03
+
 // Remove a photo's background entirely in-browser, returning a transparent-PNG
 // cutout. The model (~10 MB WASM + weights) is imported lazily so it stays out
 // of the main bundle and only downloads the first time a parent takes a photo
@@ -18,6 +25,100 @@ export async function removeImageBackground(file: File): Promise<Blob> {
   }
   const { removeBackground } = await import('@imgly/background-removal')
   return removeBackground(file)
+}
+
+// Crop a transparent cutout down to the bounding box of its visible pixels so
+// the subject fills the sticker frame instead of floating in empty space — the
+// background-removal model leaves wide transparent margins around the subject.
+// A fully opaque image (e.g. a JPG with no alpha) has a full-frame box, so this
+// is a no-op for it. Returns a PNG to preserve transparency; feed it through
+// processStickerImage() afterward to resize + re-encode for upload.
+export async function autoCropTransparent(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob)
+  try {
+    const { width, height } = bitmap
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('Could not process the image.')
+    }
+    ctx.drawImage(bitmap, 0, 0)
+    const { data } = ctx.getImageData(0, 0, width, height)
+
+    const bounds = alphaBounds(data, width, height)
+    if (!bounds) {
+      // Nothing visible (fully transparent) — leave the cutout untouched.
+      return blob
+    }
+
+    const pad = Math.round(
+      Math.max(bounds.maxX - bounds.minX, bounds.maxY - bounds.minY) *
+        CROP_PADDING_RATIO,
+    )
+    const left = Math.max(0, bounds.minX - pad)
+    const top = Math.max(0, bounds.minY - pad)
+    const right = Math.min(width - 1, bounds.maxX + pad)
+    const bottom = Math.min(height - 1, bounds.maxY + pad)
+    const cropWidth = right - left + 1
+    const cropHeight = bottom - top + 1
+
+    // Already edge-to-edge — skip a needless re-encode.
+    if (cropWidth >= width && cropHeight >= height) {
+      return blob
+    }
+
+    const out = document.createElement('canvas')
+    out.width = cropWidth
+    out.height = cropHeight
+    const outCtx = out.getContext('2d')
+    if (!outCtx) {
+      throw new Error('Could not process the image.')
+    }
+    outCtx.drawImage(
+      canvas,
+      left,
+      top,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      cropWidth,
+      cropHeight,
+    )
+    return await canvasToBlob(out, 'image/png', 1)
+  } finally {
+    bitmap.close()
+  }
+}
+
+// Tightest box of pixels whose alpha clears ALPHA_THRESHOLD. Returns null when
+// every pixel is (near-)transparent.
+function alphaBounds(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number,
+): { minX: number; minY: number; maxX: number; maxY: number } | null {
+  let minX = width
+  let minY = height
+  let maxX = -1
+  let maxY = -1
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const alpha = data[(y * width + x) * 4 + 3]
+      if (alpha > ALPHA_THRESHOLD) {
+        if (x < minX) minX = x
+        if (x > maxX) maxX = x
+        if (y < minY) minY = y
+        if (y > maxY) maxY = y
+      }
+    }
+  }
+  if (maxX < 0) {
+    return null
+  }
+  return { minX, minY, maxX, maxY }
 }
 
 export async function processStickerImage(file: File): Promise<Blob> {

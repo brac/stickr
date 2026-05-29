@@ -8,7 +8,7 @@ import {
   stickerImageUrl,
   uploadStickerImage,
 } from '../lib/stickerImages'
-import { removeImageBackground } from '../lib/imageProcessing'
+import { autoCropTransparent, removeImageBackground } from '../lib/imageProcessing'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { StickerImage } from '../lib/types'
@@ -77,7 +77,9 @@ export function StickerLibrary() {
     setProcessing(true)
     try {
       const cutout = await removeImageBackground(file)
-      setPreview({ url: URL.createObjectURL(cutout), blob: cutout })
+      // Crop away the transparent margin so the subject fills the sticker.
+      const cropped = await autoCropTransparent(cutout)
+      setPreview({ url: URL.createObjectURL(cropped), blob: cropped })
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
