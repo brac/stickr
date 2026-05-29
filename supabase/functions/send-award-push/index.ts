@@ -122,9 +122,13 @@ Deno.serve(async (req) => {
   const notification = JSON.stringify({ title: 'Stickr', body, url: '/' })
 
   // Send to every recipient device. A 404/410 means the subscription has
-  // lapsed — prune it so we stop trying.
+  // lapsed — prune it so we stop trying. Any OTHER failure (401/403 VAPID-key
+  // mismatch, network, payload too large) is a real delivery problem: log it
+  // and count it, so a silent push outage shows up in the function logs and the
+  // response body instead of looking identical to success.
   const stale: string[] = []
   let sent = 0
+  let failed = 0
   await Promise.all(
     subscriptions.map(async (sub) => {
       try {
@@ -140,6 +144,24 @@ Deno.serve(async (req) => {
         const statusCode = (err as { statusCode?: number }).statusCode
         if (statusCode === 404 || statusCode === 410) {
           stale.push(sub.id)
+        } else {
+          failed += 1
+          const detail = err instanceof Error ? err.message : String(err)
+          const responseBody = (err as { body?: string }).body
+          let host = 'unknown'
+          try {
+            host = new URL(sub.endpoint).host
+          } catch {
+            // endpoint not a valid URL — leave host as 'unknown'
+          }
+          // A 401/403 here almost always means the stored subscription was
+          // created with a different VAPID key than this function signs with;
+          // re-subscribe each device after any key change.
+          console.error(
+            `[send-award-push] delivery failed for subscription ${sub.id} ` +
+              `(host ${host}, status ${statusCode ?? 'unknown'}): ${detail}` +
+              (responseBody ? ` — ${responseBody}` : ''),
+          )
         }
       }
     }),
@@ -149,7 +171,7 @@ Deno.serve(async (req) => {
     await supabase.from('push_subscription').delete().in('id', stale)
   }
 
-  return new Response(JSON.stringify({ sent, pruned: stale.length }), {
+  return new Response(JSON.stringify({ sent, pruned: stale.length, failed }), {
     headers: { 'Content-Type': 'application/json' },
   })
 })
