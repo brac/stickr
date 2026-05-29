@@ -142,17 +142,12 @@ body {
   }
 }
 
-/* Die-cut sticker edge: a white border that hugs the cutout's alpha silhouette
-   (chained drop-shadows fill the diagonals), plus a soft lift so it pops off a
-   white background. Used for background-removed photo avatars. */
+/* The white die-cut border is baked into the avatar image itself (see
+   addStickerBorder in imageProcessing.ts — set thickness via
+   STICKER_BORDER_RATIO there). This just adds a soft lift so the sticker pops
+   off a white background. */
 .die-cut {
-  --die-cut-width: 20px;
-  filter:
-    drop-shadow(var(--die-cut-width) 0 0 #fff)
-    drop-shadow(calc(-1 * var(--die-cut-width)) 0 0 #fff)
-    drop-shadow(0 var(--die-cut-width) 0 #fff)
-    drop-shadow(0 calc(-1 * var(--die-cut-width)) 0 #fff)
-    drop-shadow(0 2px 3px oklch(28% 0.05 60 / 0.3));
+  filter: drop-shadow(0 2px 3px oklch(28% 0.05 60 / 0.3));
 }
 
 /* Toasts slide in from the top edge. Compositor-friendly. */

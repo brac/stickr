@@ -14,6 +14,11 @@ const OUTPUT_QUALITY = 0.9
 const ALPHA_THRESHOLD = 8
 const CROP_PADDING_RATIO = 0.03
 
+// Thickness of the baked die-cut sticker border, as a fraction of the cutout's
+// larger dimension. ~6% reads as a clean sticker edge once scaled down to the
+// avatar sizes. This is the single knob for border thickness.
+const STICKER_BORDER_RATIO = 0.06
+
 // Remove a photo's background entirely in-browser, returning a transparent-PNG
 // cutout. The model (~10 MB WASM + weights) is imported lazily so it stays out
 // of the main bundle and only downloads the first time a parent takes a photo
@@ -120,6 +125,61 @@ function alphaBounds(
     return null
   }
   return { minX, minY, maxX, maxY }
+}
+
+// Bake a white die-cut border around a transparent cutout: dilate the subject's
+// silhouette outward in white, then draw the original on top. This produces a
+// true, even outline that follows the alpha shape — unlike stacked CSS
+// drop-shadows, which render as visible offset copies on a detailed photo.
+// Returns a PNG (transparent outside the border).
+export async function addStickerBorder(blob: Blob): Promise<Blob> {
+  const bitmap = await createImageBitmap(blob)
+  try {
+    const { width: w, height: h } = bitmap
+    const border = Math.max(1, Math.round(Math.max(w, h) * STICKER_BORDER_RATIO))
+    const pad = border + 2
+    const outWidth = w + pad * 2
+    const outHeight = h + pad * 2
+
+    // A pure-white version of the cutout (alpha preserved) to stamp as the matte.
+    const silhouette = document.createElement('canvas')
+    silhouette.width = w
+    silhouette.height = h
+    const silCtx = silhouette.getContext('2d')
+    if (!silCtx) {
+      throw new Error('Could not process the image.')
+    }
+    silCtx.drawImage(bitmap, 0, 0)
+    silCtx.globalCompositeOperation = 'source-in'
+    silCtx.fillStyle = '#ffffff'
+    silCtx.fillRect(0, 0, w, h)
+
+    const out = document.createElement('canvas')
+    out.width = outWidth
+    out.height = outHeight
+    const ctx = out.getContext('2d')
+    if (!ctx) {
+      throw new Error('Could not process the image.')
+    }
+
+    // Stamp the white silhouette around a circle; the union is the silhouette
+    // dilated by `border` — a smooth outline. 32 steps keeps the edge clean.
+    const steps = 32
+    for (let i = 0; i < steps; i += 1) {
+      const angle = (i / steps) * Math.PI * 2
+      ctx.drawImage(
+        silhouette,
+        pad + Math.cos(angle) * border,
+        pad + Math.sin(angle) * border,
+      )
+    }
+    // The photo itself, centered on top of the matte.
+    ctx.drawImage(bitmap, pad, pad)
+
+    return await canvasToBlob(out, 'image/png', 1)
+  } finally {
+    bitmap.close()
+  }
 }
 
 export async function processStickerImage(file: File): Promise<Blob> {

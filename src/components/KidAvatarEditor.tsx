@@ -1,5 +1,9 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import { autoCropTransparent, removeImageBackground } from '../lib/imageProcessing'
+import {
+  addStickerBorder,
+  autoCropTransparent,
+  removeImageBackground,
+} from '../lib/imageProcessing'
 import {
   removeKidAvatar,
   setKidAvatarEmoji,
@@ -47,7 +51,9 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
     try {
       const cutout = await removeImageBackground(file)
       const cropped = await autoCropTransparent(cutout)
-      setPreview({ url: URL.createObjectURL(cropped), blob: cropped })
+      // Bake the white die-cut border so the preview shows the real result.
+      const bordered = await addStickerBorder(cropped)
+      setPreview({ url: URL.createObjectURL(bordered), blob: bordered })
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -62,7 +68,7 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
     })
   }
 
-  async function usePhoto() {
+  async function confirmPhoto() {
     if (!preview) return
     setSaving(true)
     try {
@@ -140,13 +146,14 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
         {preview ? (
           <>
             <p className="mt-1 text-center text-sm text-ink-muted">
-              Background removed. This goes on {kid.name}&rsquo;s badge.
+              Background removed with a die-cut border. This is {kid.name}&rsquo;s
+              sticker.
             </p>
-            <div className="checkerboard mx-auto mt-4 flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl border border-black/10">
+            <div className="mx-auto mt-4 flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl border border-black/10 bg-black/5">
               <img
                 src={preview.url}
                 alt="Avatar preview"
-                className="h-full w-full object-contain"
+                className="die-cut h-full w-full object-contain"
                 draggable={false}
               />
             </div>
@@ -154,7 +161,7 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => void usePhoto()}
+                onClick={() => void confirmPhoto()}
                 className="flex-1 rounded-lg bg-accent px-4 py-2.5 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
               >
                 {saving ? 'Saving…' : 'Use photo'}
@@ -193,7 +200,7 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
                 onClick={() => cameraInputRef.current?.click()}
                 className="rounded-[var(--radius-card)] bg-accent px-4 py-3 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
               >
-                {processing ? 'Removing…' : 'Take photo'}
+                {processing ? 'Stickr!' : 'Take photo'}
               </button>
               <button
                 type="button"
