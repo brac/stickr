@@ -78,9 +78,6 @@ export interface StickerCutoutResult {
   blob: Blob
   // false when background removal failed and we fell back to the full photo.
   backgroundRemoved: boolean
-  // The underlying error message when we fell back — surfaced in the UI so an
-  // on-device failure can be diagnosed without a desktop Web Inspector.
-  fallbackReason?: string
 }
 
 // Run the cutout pipeline, degrading to the plain (square-cropped) photo if
@@ -104,18 +101,17 @@ async function cutoutOrFallback(file: File): Promise<StickerCutoutResult> {
       '[imageProcessing] background removal unavailable; using the full photo',
       err,
     )
-    const fallbackReason = err instanceof Error ? err.message : String(err)
     const square = await cropToSquareCover(file)
-    return { blob: square, backgroundRemoved: false, fallbackReason }
+    return { blob: square, backgroundRemoved: false }
   }
 }
 
 // Avatar sticker: cutout (or fallback square) with the white die-cut border
 // baked on. On the fallback path the border frames the square photo.
 export async function makeAvatarSticker(file: File): Promise<StickerCutoutResult> {
-  const result = await cutoutOrFallback(file)
-  const bordered = await addStickerBorder(result.blob)
-  return { ...result, blob: bordered }
+  const { blob, backgroundRemoved } = await cutoutOrFallback(file)
+  const bordered = await addStickerBorder(blob)
+  return { blob: bordered, backgroundRemoved }
 }
 
 // Library photo sticker: cutout (or fallback square), no border.

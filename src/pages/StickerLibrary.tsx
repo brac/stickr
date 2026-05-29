@@ -77,14 +77,11 @@ export function StickerLibrary() {
     if (!file) return
     setProcessing(true)
     try {
-      const { blob, backgroundRemoved, fallbackReason } =
-        await makePhotoSticker(file)
+      const { blob, backgroundRemoved } = await makePhotoSticker(file)
       setPreview({ url: URL.createObjectURL(blob), blob, backgroundRemoved })
       if (!backgroundRemoved) {
         toast.info(
-          `Couldn't remove the background — using the full photo.${
-            fallbackReason ? ` (${fallbackReason})` : ''
-          }`,
+          "Couldn't remove the background on this device — using the full photo.",
         )
       }
     } catch (err) {

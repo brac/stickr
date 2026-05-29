@@ -46,14 +46,11 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
     if (!file) return
     setProcessing(true)
     try {
-      const { blob, backgroundRemoved, fallbackReason } =
-        await makeAvatarSticker(file)
+      const { blob, backgroundRemoved } = await makeAvatarSticker(file)
       setPreview({ url: URL.createObjectURL(blob), blob, backgroundRemoved })
       if (!backgroundRemoved) {
         toast.info(
-          `Couldn't remove the background — using the full photo.${
-            fallbackReason ? ` (${fallbackReason})` : ''
-          }`,
+          "Couldn't remove the background on this device — using the full photo.",
         )
       }
     } catch (err) {
