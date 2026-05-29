@@ -84,7 +84,7 @@ export function BoardMenu({
             onClick={() => runAndClose(onSetup)}
             className="block w-full px-4 py-2.5 text-left text-sm text-ink transition-colors hover:bg-black/5"
           >
-            Chores &amp; stickers
+            Setup
           </button>
           <button
             type="button"
