@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import { AuthProvider } from './auth/AuthProvider'
 import { RequireAuth } from './components/RequireAuth'
 import { Home } from './pages/Home'
+import { KidBoard } from './pages/KidBoard'
 import { SignIn } from './pages/SignIn'
 import { Onboarding } from './pages/Onboarding'
 import { SetupHome } from './pages/SetupHome'
@@ -29,6 +30,14 @@ export default function App() {
           element={
             <RequireAuth>
               <Home />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/board"
+          element={
+            <RequireAuth>
+              <KidBoard />
             </RequireAuth>
           }
         />

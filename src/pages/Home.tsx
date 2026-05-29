@@ -222,6 +222,7 @@ export function Home() {
         </div>
         <BoardMenu
           undoDisabled={(selectedApi?.total ?? 0) === 0}
+          onKidView={() => navigate('/board')}
           onSetup={() => navigate('/setup')}
           onHistory={() => navigate('/history')}
           onUndoLast={() => void selectedApi?.undoLast()}

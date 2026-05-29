@@ -1,4 +1,4 @@
-import { useState, type CSSProperties } from 'react'
+import { useState, type CSSProperties, type ReactNode } from 'react'
 import {
   STICKER_SIZE,
   boardHeight,
@@ -29,6 +29,9 @@ interface StickerBoardProps {
   // may clear ids after the animation; each Sticker captures its entrance at
   // mount, so clearing never restarts an already-played animation.
   newIds?: ReadonlySet<string>
+  // Kid-facing board: stickers spring up on hover/tap. Read-only — no clicks.
+  // The parent board and history snapshots omit this (behaviour unchanged).
+  interactive?: boolean
 }
 
 export function StickerBoard({
@@ -36,6 +39,7 @@ export function StickerBoard({
   layout,
   imageUrls,
   newIds,
+  interactive = false,
 }: StickerBoardProps) {
   const height = boardHeight(events.length || 1, layout.rowSize)
   return (
@@ -59,6 +63,7 @@ export function StickerBoard({
             rotation={pos.rotation}
             artUrl={art}
             isNew={newIds?.has(event.id) ?? false}
+            interactive={interactive}
           />
         )
       })}
@@ -78,9 +83,10 @@ interface StickerProps {
   rotation: number
   artUrl: string | null
   isNew: boolean
+  interactive: boolean
 }
 
-function Sticker({ seedId, x, y, rotation, artUrl, isNew }: StickerProps) {
+function Sticker({ seedId, x, y, rotation, artUrl, isNew, interactive }: StickerProps) {
   // Capture the entrance once, at mount: a freshly awarded sticker drops in,
   // everything else gets the gentle pop. Frozen so a later prop change (e.g. the
   // parent clearing newIds) can't retrigger the animation.
@@ -92,25 +98,47 @@ function Sticker({ seedId, x, y, rotation, artUrl, isNew }: StickerProps) {
     '--y': `${y}px`,
     '--rot': `${rotation}deg`,
   }
+  const art = artUrl ? (
+    <img
+      src={artUrl}
+      alt=""
+      width={STICKER_SIZE}
+      height={STICKER_SIZE}
+      draggable={false}
+      className="h-full w-full object-contain"
+    />
+  ) : (
+    <FallbackStar seedId={seedId} />
+  )
   return (
     <div
       className={`${entrance} absolute top-0 left-0`}
       style={style}
       data-testid="sticker"
     >
-      {artUrl ? (
-        <img
-          src={artUrl}
-          alt=""
-          width={STICKER_SIZE}
-          height={STICKER_SIZE}
-          draggable={false}
-          className="h-full w-full object-contain"
-        />
-      ) : (
-        <FallbackStar seedId={seedId} />
-      )}
+      {interactive ? <InteractiveArt seedId={seedId}>{art}</InteractiveArt> : art}
     </div>
+  )
+}
+
+// Wraps the sticker art so it springs up on hover/tap, with a small seeded
+// rotation so each one wobbles a touch differently. Scaling here (not on the
+// positioned parent) keeps the entrance animation's transform untouched.
+function InteractiveArt({
+  seedId,
+  children,
+}: {
+  seedId: string
+  children: ReactNode
+}) {
+  const hoverRot = (hashStringToSeed(seedId) % 17) - 8 // -8°..+8°
+  const style: CSSProperties & Record<'--hover-rot', string> = {
+    '--hover-rot': `${hoverRot}deg`,
+  }
+  return (
+    <span className="sticker-interactive" style={style}>
+      {children}
+    </span>
   )
 }
 

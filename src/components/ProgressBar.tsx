@@ -3,7 +3,8 @@ import type { RewardTier } from '../lib/types'
 interface ProgressBarProps {
   total: number
   tiers: RewardTier[]
-  onClaimClick: () => void
+  // Omit to render read-only (no claim button) — used by the kid-facing board.
+  onClaimClick?: () => void
 }
 
 export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
@@ -43,7 +44,7 @@ export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
         ) : null}
       </div>
 
-      {unlockedCount > 0 && (
+      {onClaimClick && unlockedCount > 0 && (
         <button
           type="button"
           onClick={onClaimClick}
