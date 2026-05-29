@@ -27,12 +27,14 @@ export async function removeImageBackground(file: File): Promise<Blob> {
   return removeBackground(file)
 }
 
-// Crop a transparent cutout down to the bounding box of its visible pixels so
-// the subject fills the sticker frame instead of floating in empty space — the
-// background-removal model leaves wide transparent margins around the subject.
-// A fully opaque image (e.g. a JPG with no alpha) has a full-frame box, so this
-// is a no-op for it. Returns a PNG to preserve transparency; feed it through
-// processStickerImage() afterward to resize + re-encode for upload.
+// Tighten a transparent cutout to its subject and centre that subject in a
+// square. Background removal leaves wide, uneven transparent margins, so without
+// this the subject floats off-centre and at an inconsistent size. We crop to the
+// bounding box of visible pixels (plus a little padding), then letterbox it into
+// a square canvas so every sticker shares one centred footprint — the board
+// renders stickers in a square slot with object-contain. Returns a PNG to
+// preserve transparency; feed it through processStickerImage() afterward to
+// resize + re-encode for upload.
 export async function autoCropTransparent(blob: Blob): Promise<Blob> {
   const bitmap = await createImageBitmap(blob)
   try {
@@ -64,14 +66,13 @@ export async function autoCropTransparent(blob: Blob): Promise<Blob> {
     const cropWidth = right - left + 1
     const cropHeight = bottom - top + 1
 
-    // Already edge-to-edge — skip a needless re-encode.
-    if (cropWidth >= width && cropHeight >= height) {
-      return blob
-    }
-
+    // Letterbox the cropped subject into a square, centred on both axes. The
+    // shorter axis gets equal transparent margins, so the subject lands dead
+    // centre and fills the board's square sticker slot consistently.
+    const side = Math.max(cropWidth, cropHeight)
     const out = document.createElement('canvas')
-    out.width = cropWidth
-    out.height = cropHeight
+    out.width = side
+    out.height = side
     const outCtx = out.getContext('2d')
     if (!outCtx) {
       throw new Error('Could not process the image.')
@@ -82,8 +83,8 @@ export async function autoCropTransparent(blob: Blob): Promise<Blob> {
       top,
       cropWidth,
       cropHeight,
-      0,
-      0,
+      Math.round((side - cropWidth) / 2),
+      Math.round((side - cropHeight) / 2),
       cropWidth,
       cropHeight,
     )
