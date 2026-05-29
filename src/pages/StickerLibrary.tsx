@@ -8,15 +8,17 @@ import {
   stickerImageUrl,
   uploadStickerImage,
 } from '../lib/stickerImages'
-import { makePhotoSticker } from '../lib/imageProcessing'
+import { makeStickerCutout, type StickerTreatment } from '../lib/imageProcessing'
 import { getErrorMessage } from '../lib/errors'
+import { prefersWebcamCapture } from '../lib/webcam'
+import { WebcamCapture } from '../components/WebcamCapture'
 import { useToast } from '../components/toast/useToast'
 import type { StickerImage } from '../lib/types'
 
 interface Preview {
   url: string
   blob: Blob
-  backgroundRemoved: boolean
+  treatment: StickerTreatment
 }
 
 export function StickerLibrary() {
@@ -26,6 +28,7 @@ export function StickerLibrary() {
   const [busy, setBusy] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [showWebcam, setShowWebcam] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cameraInputRef = useRef<HTMLInputElement>(null)
 
@@ -47,39 +50,53 @@ export function StickerLibrary() {
   async function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     const files = event.target.files
     if (!files || !parent) return
-    setBusy(true)
+    // Uploaded photos get the same cutout + die-cut border as the camera path,
+    // so every sticker shares one look. Background removal is slow, so this
+    // reuses the "processing" state to disable the controls while it runs.
+    setProcessing(true)
     try {
       let count = 0
+      let fellBack = 0
       for (const file of Array.from(files)) {
+        const label = file.name.replace(/\.[^.]+$/, '')
+        const { blob, treatment } = await makeStickerCutout(file)
+        if (treatment === 'fallback') fellBack++
+        const processed = new File([blob], `${label}.png`, { type: 'image/png' })
         const image = await uploadStickerImage({
-          file,
+          file: processed,
           householdId: parent.household_id,
-          label: file.name.replace(/\.[^.]+$/, ''),
+          label,
         })
         setImages((prev) => [image, ...prev])
         count++
       }
       if (count > 0) {
         toast.success(`${count} image${count === 1 ? '' : 's'} uploaded.`)
+        if (fellBack > 0) {
+          toast.info(
+            `Couldn't remove the background on ${fellBack} ${
+              fellBack === 1 ? 'image' : 'images'
+            } — used the full photo.`,
+          )
+        }
       }
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
-      setBusy(false)
+      setProcessing(false)
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
 
-  // Camera capture → in-browser background removal → preview, before upload.
-  async function handlePhoto(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    if (cameraInputRef.current) cameraInputRef.current.value = ''
-    if (!file) return
+  // Take photo → in-browser background removal → preview, before upload. The
+  // source is the desktop webcam or the mobile native camera, both funnelled
+  // through here as a File.
+  async function processPhoto(file: File) {
     setProcessing(true)
     try {
-      const { blob, backgroundRemoved } = await makePhotoSticker(file)
-      setPreview({ url: URL.createObjectURL(blob), blob, backgroundRemoved })
-      if (!backgroundRemoved) {
+      const { blob, treatment } = await makeStickerCutout(file)
+      setPreview({ url: URL.createObjectURL(blob), blob, treatment })
+      if (treatment === 'fallback') {
         toast.info(
           "Couldn't remove the background on this device — using the full photo.",
         )
@@ -89,6 +106,22 @@ export function StickerLibrary() {
     } finally {
       setProcessing(false)
     }
+  }
+
+  // "Take photo": drive the webcam directly on desktop (where the file input's
+  // capture attribute is ignored), else open the device camera via the input.
+  function startPhotoCapture() {
+    if (prefersWebcamCapture()) {
+      setShowWebcam(true)
+    } else {
+      cameraInputRef.current?.click()
+    }
+  }
+
+  function onCameraInput(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    if (cameraInputRef.current) cameraInputRef.current.value = ''
+    if (file) void processPhoto(file)
   }
 
   function closePreview() {
@@ -150,14 +183,14 @@ export function StickerLibrary() {
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={(event) => void handlePhoto(event)}
+        onChange={onCameraInput}
         className="hidden"
       />
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
           disabled={busy || processing}
-          onClick={() => cameraInputRef.current?.click()}
+          onClick={startPhotoCapture}
           className="rounded-[var(--radius-card)] bg-accent px-4 py-3 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
         >
           {processing ? 'Removing background…' : 'Take photo'}
@@ -168,12 +201,12 @@ export function StickerLibrary() {
           onClick={() => fileInputRef.current?.click()}
           className="rounded-[var(--radius-card)] border border-accent/40 bg-accent/5 px-4 py-3 font-medium text-accent-strong transition-colors hover:border-accent hover:bg-accent/10 disabled:opacity-60"
         >
-          {busy ? 'Uploading…' : 'Upload images'}
+          {processing ? 'Processing…' : busy ? 'Uploading…' : 'Upload images'}
         </button>
       </div>
       <p className="mt-2 text-center text-xs text-ink-muted">
-        Take a photo of a sticker (on a contrasting surface) and the background
-        is removed automatically. Or upload PNG, JPG, or WebP.
+        Take a photo or upload one (PNG, JPG, or WebP) — the background is
+        removed and a die-cut border added automatically.
       </p>
 
       {images.length === 0 ? (
@@ -218,9 +251,11 @@ export function StickerLibrary() {
               Use this sticker?
             </h2>
             <p className="mt-1 text-center text-sm text-ink-muted">
-              {preview.backgroundRemoved
-                ? 'Background removed. Transparent areas show as a checkerboard.'
-                : "Couldn't remove the background on this device — using the full photo."}
+              {preview.treatment === 'cutout'
+                ? 'Background removed with a die-cut border. Transparent areas show as a checkerboard.'
+                : preview.treatment === 'passthrough'
+                  ? 'Already transparent — using your image as-is.'
+                  : "Couldn't remove the background on this device — using the full photo."}
             </p>
             <div className="checkerboard mx-auto mt-4 flex aspect-square w-48 items-center justify-center overflow-hidden rounded-xl border border-black/10">
               <img
@@ -244,7 +279,7 @@ export function StickerLibrary() {
                 disabled={busy}
                 onClick={() => {
                   closePreview()
-                  cameraInputRef.current?.click()
+                  startPhotoCapture()
                 }}
                 className="rounded-lg px-4 py-2.5 font-medium text-ink-muted transition-colors hover:bg-black/5 disabled:opacity-60"
               >
@@ -261,6 +296,16 @@ export function StickerLibrary() {
             </div>
           </div>
         </div>
+      )}
+
+      {showWebcam && (
+        <WebcamCapture
+          onCapture={(file) => {
+            setShowWebcam(false)
+            void processPhoto(file)
+          }}
+          onClose={() => setShowWebcam(false)}
+        />
       )}
     </SetupShell>
   )

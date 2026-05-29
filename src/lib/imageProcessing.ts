@@ -35,8 +35,7 @@ const STICKER_BORDER_RATIO = 0.06
 //   - device 'cpu' pins the WASM/CPU backend. iOS has no stable WebGPU, so
 //     don't let the lib probe for one.
 // If this still fails on a device, callers fall back to the un-cut photo (see
-// makeAvatarSticker / makePhotoSticker), so the feature degrades instead of
-// hard-failing.
+// makeStickerCutout), so the feature degrades instead of hard-failing.
 export async function removeImageBackground(file: File): Promise<Blob> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Please choose an image file.')
@@ -74,7 +73,19 @@ async function cropToSquareCover(file: File): Promise<Blob> {
   }
 }
 
+// 'cutout'      — background removed and the white die-cut border baked on.
+// 'passthrough' — input already had transparency (a finished cutout); used
+//                 as-is, with no removal and no border.
+// 'fallback'    — background removal was unavailable on the device; the plain
+//                 square photo, no border.
+export type StickerTreatment = 'cutout' | 'passthrough' | 'fallback'
+
 export interface StickerCutoutResult {
+  blob: Blob
+  treatment: StickerTreatment
+}
+
+interface CutoutAttempt {
   blob: Blob
   // false when background removal failed and we fell back to the full photo.
   backgroundRemoved: boolean
@@ -86,7 +97,7 @@ export interface StickerCutoutResult {
 // can't instantiate — so any failure in it (or the crop that depends on its
 // transparency) drops to the fallback rather than erroring out. Non-image
 // inputs are rejected up front so a bad file still surfaces a clear message.
-async function cutoutOrFallback(file: File): Promise<StickerCutoutResult> {
+async function cutoutOrFallback(file: File): Promise<CutoutAttempt> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Please choose an image file.')
   }
@@ -106,17 +117,61 @@ async function cutoutOrFallback(file: File): Promise<StickerCutoutResult> {
   }
 }
 
-// Avatar sticker: cutout (or fallback square) with the white die-cut border
-// baked on. On the fallback path the border frames the square photo.
-export async function makeAvatarSticker(file: File): Promise<StickerCutoutResult> {
-  const { blob, backgroundRemoved } = await cutoutOrFallback(file)
-  const bordered = await addStickerBorder(blob)
-  return { blob: bordered, backgroundRemoved }
+// Detect an image that already carries transparency (i.e. a finished cutout).
+// Only PNG/WebP can hold an alpha channel; decode at a small scale and look for
+// any non-opaque pixel. A probe failure is non-fatal — treat as opaque and let
+// the normal pipeline run.
+async function hasTransparency(file: File): Promise<boolean> {
+  if (file.type !== 'image/png' && file.type !== 'image/webp') {
+    return false
+  }
+  try {
+    const bitmap = await createImageBitmap(file)
+    try {
+      const SAMPLE = 64
+      const scale = Math.min(1, SAMPLE / Math.max(bitmap.width, bitmap.height))
+      const width = Math.max(1, Math.round(bitmap.width * scale))
+      const height = Math.max(1, Math.round(bitmap.height * scale))
+      const canvas = document.createElement('canvas')
+      canvas.width = width
+      canvas.height = height
+      const ctx = canvas.getContext('2d')
+      if (!ctx) {
+        return false
+      }
+      ctx.drawImage(bitmap, 0, 0, width, height)
+      const { data } = ctx.getImageData(0, 0, width, height)
+      for (let i = 3; i < data.length; i += 4) {
+        if (data[i] < 250) {
+          return true
+        }
+      }
+      return false
+    } finally {
+      bitmap.close()
+    }
+  } catch {
+    return false
+  }
 }
 
-// Library photo sticker: cutout (or fallback square), no border.
-export async function makePhotoSticker(file: File): Promise<StickerCutoutResult> {
-  return cutoutOrFallback(file)
+// The full sticker treatment for any photo — kid avatars and sticker-library
+// images alike. An image that already has transparency is treated as a finished
+// cutout and passed through untouched (re-running removal would re-segment and
+// likely clip it). Otherwise: background cutout with the white die-cut border
+// baked on, falling back to the plain square photo *without* the border when
+// removal is unavailable on the device (the die-cut outline only reads as
+// intentional around a real cutout silhouette, not a rectangular photo).
+export async function makeStickerCutout(file: File): Promise<StickerCutoutResult> {
+  if (await hasTransparency(file)) {
+    return { blob: file, treatment: 'passthrough' }
+  }
+  const { blob, backgroundRemoved } = await cutoutOrFallback(file)
+  if (!backgroundRemoved) {
+    return { blob, treatment: 'fallback' }
+  }
+  const bordered = await addStickerBorder(blob)
+  return { blob: bordered, treatment: 'cutout' }
 }
 
 // Tighten a transparent cutout to its subject and centre that subject in a

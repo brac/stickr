@@ -1,11 +1,13 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import { makeAvatarSticker } from '../lib/imageProcessing'
+import { makeStickerCutout, type StickerTreatment } from '../lib/imageProcessing'
 import {
   removeKidAvatar,
   setKidAvatarEmoji,
   uploadKidAvatar,
 } from '../lib/kidAvatars'
 import { getErrorMessage } from '../lib/errors'
+import { prefersWebcamCapture } from '../lib/webcam'
+import { WebcamCapture } from './WebcamCapture'
 import { useToast } from './toast/useToast'
 import { KidAvatar } from './KidAvatar'
 import type { Kid } from '../lib/types'
@@ -27,7 +29,7 @@ interface KidAvatarEditorProps {
 interface Preview {
   url: string
   blob: Blob
-  backgroundRemoved: boolean
+  treatment: StickerTreatment
 }
 
 export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProps) {
@@ -35,20 +37,18 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
   const [processing, setProcessing] = useState(false)
   const [saving, setSaving] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
+  const [showWebcam, setShowWebcam] = useState(false)
   const cameraInputRef = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Both the camera and the upload path get background removal + autocrop, for
   // the sticker-cutout look.
-  async function processFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0]
-    event.target.value = ''
-    if (!file) return
+  async function processPhoto(file: File) {
     setProcessing(true)
     try {
-      const { blob, backgroundRemoved } = await makeAvatarSticker(file)
-      setPreview({ url: URL.createObjectURL(blob), blob, backgroundRemoved })
-      if (!backgroundRemoved) {
+      const { blob, treatment } = await makeStickerCutout(file)
+      setPreview({ url: URL.createObjectURL(blob), blob, treatment })
+      if (treatment === 'fallback') {
         toast.info(
           "Couldn't remove the background on this device — using the full photo.",
         )
@@ -57,6 +57,22 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
       toast.error(getErrorMessage(err))
     } finally {
       setProcessing(false)
+    }
+  }
+
+  function onPickInput(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (file) void processPhoto(file)
+  }
+
+  // "Take photo": drive the webcam directly on desktop (where the file input's
+  // capture attribute just opens a file browser), else the device camera.
+  function startPhotoCapture() {
+    if (prefersWebcamCapture()) {
+      setShowWebcam(true)
+    } else {
+      cameraInputRef.current?.click()
     }
   }
 
@@ -126,14 +142,14 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
         type="file"
         accept="image/*"
         capture="environment"
-        onChange={(e) => void processFile(e)}
+        onChange={onPickInput}
         className="hidden"
       />
       <input
         ref={fileInputRef}
         type="file"
         accept="image/png,image/jpeg,image/webp"
-        onChange={(e) => void processFile(e)}
+        onChange={onPickInput}
         className="hidden"
       />
 
@@ -145,9 +161,11 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
         {preview ? (
           <>
             <p className="mt-1 text-center text-sm text-ink-muted">
-              {preview.backgroundRemoved
+              {preview.treatment === 'cutout'
                 ? `Background removed with a die-cut border. This is ${kid.name}’s sticker.`
-                : `The full photo with a die-cut border. This is ${kid.name}’s sticker.`}
+                : preview.treatment === 'passthrough'
+                  ? `Transparent image used as-is for ${kid.name}.`
+                  : `Couldn’t remove the background on this device — using the full photo for ${kid.name}.`}
             </p>
             <div className="mx-auto mt-4 flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl border border-black/10 bg-black/5">
               <img
@@ -171,7 +189,7 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
                 disabled={busy}
                 onClick={() => {
                   closePreview()
-                  cameraInputRef.current?.click()
+                  startPhotoCapture()
                 }}
                 className="rounded-lg px-4 py-2.5 font-medium text-ink-muted transition-colors hover:bg-black/5 disabled:opacity-60"
               >
@@ -197,7 +215,7 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => cameraInputRef.current?.click()}
+                onClick={startPhotoCapture}
                 className="rounded-[var(--radius-card)] bg-accent px-4 py-3 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
               >
                 {processing ? 'Stickr!' : 'Take photo'}
@@ -256,6 +274,16 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
           </>
         )}
       </div>
+
+      {showWebcam && (
+        <WebcamCapture
+          onCapture={(file) => {
+            setShowWebcam(false)
+            void processPhoto(file)
+          }}
+          onClose={() => setShowWebcam(false)}
+        />
+      )}
     </div>
   )
 }
