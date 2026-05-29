@@ -105,6 +105,12 @@ Deno.serve(async (req) => {
     .filter((id) => id !== record.awarded_by)
 
   if (recipientIds.length === 0) {
+    // Log the no-op so "nothing happened" is distinguishable from a failure: the
+    // awarder is the household's only parent.
+    console.log(
+      `[send-award-push] no recipients kid=${record.kid_id} ` +
+        `awarded_by=${record.awarded_by ?? 'null'} (awarder is sole parent)`,
+    )
     return new Response(JSON.stringify({ sent: 0, reason: 'no other parents' }), {
       headers: { 'Content-Type': 'application/json' },
     })
@@ -116,6 +122,12 @@ Deno.serve(async (req) => {
     .in('parent_id', recipientIds)
 
   if (!subscriptions || subscriptions.length === 0) {
+    // The common "I awarded but my partner got nothing" cause: the recipient
+    // parent never enabled notifications on any device. Make it visible.
+    console.log(
+      `[send-award-push] no subscriptions for ${recipientIds.length} ` +
+        `recipient(s) kid=${record.kid_id} — recipient(s) have not enabled push`,
+    )
     return new Response(JSON.stringify({ sent: 0, reason: 'no subscriptions' }), {
       headers: { 'Content-Type': 'application/json' },
     })
@@ -175,6 +187,17 @@ Deno.serve(async (req) => {
   if (stale.length > 0) {
     await supabase.from('push_subscription').delete().in('id', stale)
   }
+
+  // Always log the outcome (not just failures): a bare "POST | 200" in the edge
+  // logs is identical whether we delivered or silently failed. This one line
+  // makes a delivery test conclusive — sent>0 means the push reached the push
+  // service; failed>0 (with the per-failure status logged above) means a real
+  // delivery problem, most often a VAPID-key mismatch (403).
+  console.log(
+    `[send-award-push] result kid=${record.kid_id} ` +
+      `recipients=${recipientIds.length} subscriptions=${subscriptions.length} ` +
+      `sent=${sent} pruned=${stale.length} failed=${failed}`,
+  )
 
   return new Response(JSON.stringify({ sent, pruned: stale.length, failed }), {
     headers: { 'Content-Type': 'application/json' },

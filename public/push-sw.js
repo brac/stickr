@@ -13,9 +13,18 @@ self.addEventListener('push', (event) => {
   try {
     payload = event.data ? event.data.json() : {}
   } catch {
-    // Non-JSON payload — fall back to plain text in the body.
-    payload = { body: event.data ? event.data.text() : '' }
+    // Non-JSON payload — fall back to plain text in the body. Wrapped in its
+    // own try so a throwing .text() can never escape and skip the notification.
+    try {
+      payload = { body: event.data ? event.data.text() : '' }
+    } catch {
+      payload = {}
+    }
   }
+
+  // Log the parsed payload so Mac Safari → Develop → iPhone (Web Inspector)
+  // shows exactly what arrived on-device when a banner fails to appear.
+  console.log('[push-sw] push received', payload)
 
   const title = payload.title || 'Stickr'
   const options = {
@@ -26,10 +35,16 @@ self.addEventListener('push', (event) => {
     data: { url: payload.url || '/' },
     // Collapse rapid awards into one notification slot rather than stacking.
     tag: payload.tag || 'stickr-award',
-    renotify: true,
   }
 
-  event.waitUntil(self.registration.showNotification(title, options))
+  // showNotification is ALWAYS called (the only failure mode above leaves
+  // payload as an object with sensible fallbacks). The .catch surfaces a
+  // rejected display promise in Web Inspector instead of failing silently.
+  event.waitUntil(
+    self.registration.showNotification(title, options).catch((err) => {
+      console.error('[push-sw] showNotification failed', err)
+    }),
+  )
 })
 
 self.addEventListener('notificationclick', (event) => {

@@ -104,6 +104,27 @@ export async function subscribeToPush(parentId: string): Promise<void> {
   }
 }
 
+// Fire a notification straight from this device's service worker, bypassing
+// the remote push round-trip (VAPID, Apple, the Edge Function). If this shows a
+// banner but a real award doesn't, the break is in delivery, not display.
+export async function showTestNotification(): Promise<void> {
+  if (!isPushSupported()) {
+    throw new Error("This device doesn't support notifications.")
+  }
+  if (Notification.permission !== 'granted') {
+    throw new Error('Turn notifications on first.')
+  }
+
+  const registration = await navigator.serviceWorker.ready
+  await registration.showNotification('Stickr', {
+    body: 'Test notification — your device can show these. 🌟',
+    icon: '/pwa-192x192.png',
+    badge: '/pwa-192x192.png',
+    tag: 'stickr-test',
+    data: { url: '/' },
+  })
+}
+
 // Tear down this device's subscription, both in the browser and in the DB.
 export async function unsubscribeFromPush(): Promise<void> {
   if (!isPushSupported()) return

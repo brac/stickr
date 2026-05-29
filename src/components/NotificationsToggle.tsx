@@ -4,6 +4,7 @@ import {
   getPushState,
   subscribeToPush,
   unsubscribeFromPush,
+  showTestNotification,
   type PushState,
 } from '../lib/pushNotifications'
 import { getErrorMessage } from '../lib/errors'
@@ -53,6 +54,18 @@ export function NotificationsToggle() {
     }
   }
 
+  async function sendTest() {
+    setBusy(true)
+    try {
+      await showTestNotification()
+      toast.success('Test notification sent — check your screen.')
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   async function disable() {
     setBusy(true)
     try {
@@ -96,6 +109,17 @@ export function NotificationsToggle() {
           </button>
         ) : null}
       </div>
+
+      {state === 'subscribed' && (
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void sendTest()}
+          className="mt-3 rounded-lg border border-black/10 px-4 py-2 text-sm font-medium text-ink-muted transition-colors hover:bg-black/5 disabled:opacity-60"
+        >
+          Send a test notification
+        </button>
+      )}
 
       {state === 'denied' && (
         <p className="mt-3 rounded-lg bg-amber-100 px-3 py-2 text-sm text-amber-800">
