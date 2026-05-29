@@ -209,17 +209,13 @@ export function Home() {
   return (
     <div className="mx-auto flex min-h-full w-full max-w-7xl flex-col px-4 pb-8 sm:px-8 lg:px-12">
       <header className="flex items-center justify-between py-4">
-        <div>
-          <p className="text-sm font-medium text-ink-muted">{household?.name}</p>
-          {household && (
-            <p className="text-xs text-ink-muted">
-              Invite code:{' '}
-              <span className="font-mono tracking-widest text-ink">
-                {household.join_code}
-              </span>
-            </p>
-          )}
-        </div>
+        <button
+          type="button"
+          onClick={() => navigate('/setup/household')}
+          className="rounded-lg text-left text-sm font-medium text-ink-muted transition-colors hover:text-ink"
+        >
+          {household?.name}
+        </button>
         <BoardMenu
           undoDisabled={(selectedApi?.total ?? 0) === 0}
           onKidView={() => navigate('/board')}

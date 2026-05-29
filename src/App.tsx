@@ -6,6 +6,7 @@ import { KidBoard } from './pages/KidBoard'
 import { SignIn } from './pages/SignIn'
 import { Onboarding } from './pages/Onboarding'
 import { SetupHome } from './pages/SetupHome'
+import { HouseholdSettings } from './pages/HouseholdSettings'
 import { StickerLibrary } from './pages/StickerLibrary'
 import { KidManager } from './pages/KidManager'
 import { ChoreManager } from './pages/ChoreManager'
@@ -54,6 +55,14 @@ export default function App() {
           element={
             <RequireAuth>
               <StickerLibrary />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/setup/household"
+          element={
+            <RequireAuth>
+              <HouseholdSettings />
             </RequireAuth>
           }
         />

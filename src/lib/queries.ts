@@ -276,3 +276,42 @@ export async function joinHousehold(args: {
     throw error
   }
 }
+
+// Household members. RLS already scopes `parent` to the caller's household.
+export async function fetchParents(householdId: string): Promise<Parent[]> {
+  const { data, error } = await supabase
+    .from('parent')
+    .select('*')
+    .eq('household_id', householdId)
+    .order('created_at', { ascending: true })
+  if (error) {
+    throw error
+  }
+  return data ?? []
+}
+
+// Issue a fresh invite code (server-generated + unique). Returns the new code.
+export async function regenerateJoinCode(): Promise<string> {
+  const { data, error } = await supabase.rpc('regenerate_join_code')
+  if (error) {
+    throw error
+  }
+  return data as string
+}
+
+export async function updateHouseholdName(name: string): Promise<void> {
+  const { error } = await supabase.rpc('update_household_name', { p_name: name })
+  if (error) {
+    throw error
+  }
+}
+
+export async function updateKidName(kidId: string, name: string): Promise<void> {
+  const { error } = await supabase.rpc('update_kid_name', {
+    p_kid_id: kidId,
+    p_name: name,
+  })
+  if (error) {
+    throw error
+  }
+}

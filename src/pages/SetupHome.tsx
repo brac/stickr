@@ -5,6 +5,11 @@ import { NotificationsToggle } from '../components/NotificationsToggle'
 
 const LINKS = [
   {
+    to: '/setup/household',
+    title: 'Household',
+    description: 'Household name, invite code, members, and kid names.',
+  },
+  {
     to: '/setup/kids',
     title: 'Kids',
     description: 'Add or view the kids in your household. Each gets their own board.',

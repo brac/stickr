@@ -477,8 +477,17 @@ export type Database = {
         }
         Returns: string
       }
+      regenerate_join_code: { Args: never; Returns: string }
       set_board_layout: {
         Args: { p_layout: string }
+        Returns: undefined
+      }
+      update_household_name: {
+        Args: { p_name: string }
+        Returns: undefined
+      }
+      update_kid_name: {
+        Args: { p_kid_id: string; p_name: string }
         Returns: undefined
       }
     }
