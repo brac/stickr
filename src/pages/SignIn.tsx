@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '../auth/useAuth'
 import { supabase } from '../lib/supabase'
 import { getErrorMessage } from '../lib/errors'
@@ -125,6 +125,16 @@ export function SignIn() {
           >
             {mode === 'signin' ? 'Sign up' : 'Sign in'}
           </button>
+        </p>
+
+        <p className="mt-4 text-center text-sm text-ink-muted">
+          Just curious?{' '}
+          <Link
+            to="/demo"
+            className="font-medium text-accent-strong underline-offset-2 hover:underline"
+          >
+            Take a look first
+          </Link>
         </p>
 
         <InstallPrompt />

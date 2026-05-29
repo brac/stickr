@@ -4,6 +4,7 @@ import { RequireAuth } from './components/RequireAuth'
 import { Home } from './pages/Home'
 import { KidBoard } from './pages/KidBoard'
 import { SignIn } from './pages/SignIn'
+import { Demo } from './pages/Demo'
 import { Onboarding } from './pages/Onboarding'
 import { SetupHome } from './pages/SetupHome'
 import { HouseholdSettings } from './pages/HouseholdSettings'
@@ -18,6 +19,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/signin" element={<SignIn />} />
+        <Route path="/demo" element={<Demo />} />
         <Route
           path="/onboarding"
           element={
