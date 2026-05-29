@@ -183,7 +183,7 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
         ) : (
           <>
             <div className="mt-4 flex justify-center">
-              <KidAvatar kid={kid} size="lg" />
+              <KidAvatar kid={kid} size="lg" allowEmojiFallback />
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-3">

@@ -123,7 +123,7 @@ export function KidManager() {
             key={kid.id}
             className="flex items-center gap-3 rounded-xl border border-black/10 bg-surface-raised p-3"
           >
-            <KidAvatar kid={kid} size="md" />
+            <KidAvatar kid={kid} size="md" allowEmojiFallback />
             <span className="min-w-0 flex-1 truncate font-medium text-ink">
               {kid.name}
             </span>

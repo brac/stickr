@@ -9,6 +9,10 @@ type AvatarSize = 'sm' | 'md' | 'lg'
 interface KidAvatarProps {
   kid: Kid
   size?: AvatarSize
+  // When there's no photo, render the emoji fallback. Off by default so the
+  // boards and switcher show nothing until a real photo is set; the kid setup
+  // menu opts in so a parent can still see and edit the placeholder.
+  allowEmojiFallback?: boolean
 }
 
 // px dimensions per size, so the <img> has explicit width/height (no CLS).
@@ -23,7 +27,11 @@ const EMOJI_CLASS: Record<AvatarSize, string> = {
 // A background-removed photo renders as a die-cut sticker — a white outline
 // hugging its silhouette, no disc. The emoji fallback sits on a clean white
 // round sticker so both read as stickers, not grey badges.
-export function KidAvatar({ kid, size = 'md' }: KidAvatarProps) {
+export function KidAvatar({
+  kid,
+  size = 'md',
+  allowEmojiFallback = false,
+}: KidAvatarProps) {
   const px = SIZE_PX[size]
 
   if (kid.avatar_path) {
@@ -39,6 +47,12 @@ export function KidAvatar({ kid, size = 'md' }: KidAvatarProps) {
         style={{ width: px, height: px }}
       />
     )
+  }
+
+  // No photo: only the setup kid menu shows the emoji placeholder; everywhere
+  // else renders nothing.
+  if (!allowEmojiFallback) {
+    return null
   }
 
   return (
