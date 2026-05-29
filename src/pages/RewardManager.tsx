@@ -2,8 +2,13 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { SetupShell } from '../components/SetupShell'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { useMyParent } from '../hooks/useMyParent'
-import { fetchRewardTiers } from '../lib/queries'
-import { createRewardTier, deleteRewardTier, updateRewardTier } from '../lib/rewards'
+import { fetchArchivedRewardTiers, fetchRewardTiers } from '../lib/queries'
+import {
+  createRewardTier,
+  removeRewardTier,
+  setRewardTierActive,
+  updateRewardTier,
+} from '../lib/rewards'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { RewardTier } from '../lib/types'
@@ -18,6 +23,7 @@ export function RewardManager() {
   const { parent, loading } = useMyParent()
   const toast = useToast()
   const [tiers, setTiers] = useState<RewardTier[]>([])
+  const [archived, setArchived] = useState<RewardTier[]>([])
   const [form, setForm] = useState<FormState | null>(null)
   const [saving, setSaving] = useState(false)
 
@@ -26,9 +32,14 @@ export function RewardManager() {
   useEffect(() => {
     if (!householdId) return
     let active = true
-    fetchRewardTiers(householdId)
-      .then((rows) => {
-        if (active) setTiers(rows)
+    Promise.all([
+      fetchRewardTiers(householdId),
+      fetchArchivedRewardTiers(householdId),
+    ])
+      .then(([live, gone]) => {
+        if (!active) return
+        setTiers(live)
+        setArchived(gone)
       })
       .catch((err) => {
         if (active) toast.error(getErrorMessage(err))
@@ -40,7 +51,12 @@ export function RewardManager() {
 
   async function reload() {
     if (!householdId) return
-    setTiers(await fetchRewardTiers(householdId))
+    const [live, gone] = await Promise.all([
+      fetchRewardTiers(householdId),
+      fetchArchivedRewardTiers(householdId),
+    ])
+    setTiers(live)
+    setArchived(gone)
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -71,11 +87,25 @@ export function RewardManager() {
   }
 
   async function handleDelete(tier: RewardTier) {
-    if (!window.confirm(`Delete the "${tier.name}" reward?`)) return
+    if (!window.confirm(`Remove the "${tier.name}" reward?`)) return
     try {
-      await deleteRewardTier(tier.id)
+      const result = await removeRewardTier(tier.id)
       await reload()
-      toast.success('Reward deleted.')
+      toast.success(
+        result === 'deleted'
+          ? 'Reward deleted.'
+          : 'Reward archived — kept for reward history.',
+      )
+    } catch (err) {
+      toast.error(getErrorMessage(err))
+    }
+  }
+
+  async function handleRestore(tier: RewardTier) {
+    try {
+      await setRewardTierActive(tier.id, true)
+      await reload()
+      toast.success('Reward restored.')
     } catch (err) {
       toast.error(getErrorMessage(err))
     }
@@ -177,7 +207,7 @@ export function RewardManager() {
               onClick={() => void handleDelete(tier)}
               className="rounded-lg px-3 py-1.5 text-sm font-medium text-red-600 transition-colors hover:bg-red-50"
             >
-              Delete
+              Remove
             </button>
           </li>
         ))}
@@ -188,6 +218,40 @@ export function RewardManager() {
           </p>
         )}
       </ul>
+
+      {archived.length > 0 && (
+        <details className="mt-8 rounded-[var(--radius-card)] border border-black/10 bg-surface-raised/60">
+          <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-ink-muted">
+            Archived rewards ({archived.length})
+          </summary>
+          <p className="px-4 pb-2 text-xs text-ink-muted">
+            These were redeemed in the past, so they're kept for reward history.
+            Restore one to offer it again.
+          </p>
+          <ul className="flex flex-col gap-2 p-3 pt-1">
+            {archived.map((tier) => (
+              <li
+                key={tier.id}
+                className="flex items-center gap-3 rounded-xl border border-black/10 bg-white/60 p-3"
+              >
+                <span className="flex h-10 w-12 shrink-0 items-center justify-center rounded-lg bg-black/5 font-semibold text-ink-muted tabular-nums">
+                  {tier.threshold}
+                </span>
+                <span className="min-w-0 flex-1 truncate font-medium text-ink-muted">
+                  {tier.name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleRestore(tier)}
+                  className="rounded-lg px-3 py-1.5 text-sm font-medium text-accent-strong transition-colors hover:bg-accent/10"
+                >
+                  Restore
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
     </SetupShell>
   )
 }

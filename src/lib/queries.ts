@@ -195,6 +195,24 @@ export async function fetchRewardTiers(householdId: string): Promise<RewardTier[
     .from('reward_tier')
     .select('*')
     .eq('household_id', householdId)
+    .eq('active', true)
+    .order('threshold', { ascending: true })
+  if (error) {
+    throw error
+  }
+  return data ?? []
+}
+
+// Archived (soft-deleted) tiers — surfaced only in the reward manager so a
+// parent can restore one. The redemption picker never sees these.
+export async function fetchArchivedRewardTiers(
+  householdId: string,
+): Promise<RewardTier[]> {
+  const { data, error } = await supabase
+    .from('reward_tier')
+    .select('*')
+    .eq('household_id', householdId)
+    .eq('active', false)
     .order('threshold', { ascending: true })
   if (error) {
     throw error

@@ -47,16 +47,38 @@ export async function updateRewardTier(
   return data
 }
 
-export async function deleteRewardTier(id: string): Promise<void> {
+export type RemoveRewardTierResult = 'deleted' | 'archived'
+
+// Hard-delete a tier that has no dependents; archive (active = false) one that's
+// already been redeemed. History resolves an old chapter's reward name by
+// joining to the live reward_tier row, so a redeemed tier's row must survive —
+// archiving hides it from the manager and redemption picker without erasing it.
+export async function removeRewardTier(id: string): Promise<RemoveRewardTierResult> {
   const { error } = await supabase.from('reward_tier').delete().eq('id', id)
+  if (!error) {
+    return 'deleted'
+  }
+  // 23503 = FK restrict: a redemption_event still references this tier.
+  if (error.code !== '23503') {
+    throw new Error(getErrorMessage(error))
+  }
+
+  const { error: archiveError } = await supabase
+    .from('reward_tier')
+    .update({ active: false })
+    .eq('id', id)
+  if (archiveError) {
+    throw new Error(getErrorMessage(archiveError))
+  }
+  return 'archived'
+}
+
+export async function setRewardTierActive(id: string, active: boolean): Promise<void> {
+  const { error } = await supabase
+    .from('reward_tier')
+    .update({ active })
+    .eq('id', id)
   if (error) {
-    // A tier that's already been redeemed is referenced by a redemption_event
-    // (FK restrict). Translate the DB error into something a parent can act on.
-    if (error.code === '23503') {
-      throw new Error(
-        "This reward has already been redeemed, so it can't be deleted.",
-      )
-    }
     throw new Error(getErrorMessage(error))
   }
 }

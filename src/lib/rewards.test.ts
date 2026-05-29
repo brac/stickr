@@ -7,7 +7,8 @@ vi.mock('./supabase', () => ({ supabase: { from: fromMock } }))
 import {
   createRewardTier,
   updateRewardTier,
-  deleteRewardTier,
+  removeRewardTier,
+  setRewardTierActive,
   type RewardTierInput,
 } from './rewards'
 
@@ -56,26 +57,65 @@ describe('rewards', () => {
     })
   })
 
-  describe('deleteRewardTier', () => {
-    it('resolves when the delete succeeds', async () => {
-      fromMock.mockReturnValue(queryResult({ error: null }))
-      await expect(deleteRewardTier('tier-1')).resolves.toBeUndefined()
+  describe('removeRewardTier', () => {
+    it('hard-deletes an unreferenced tier and reports "deleted"', async () => {
+      const builder = queryResult({ error: null })
+      fromMock.mockReturnValue(builder)
+
+      await expect(removeRewardTier('tier-1')).resolves.toBe('deleted')
+      expect(builder.delete).toHaveBeenCalled()
+      // No archive update should have run when the delete succeeded.
+      expect(builder.update).not.toHaveBeenCalled()
     })
 
-    it('translates an FK-violation (already redeemed) into a parent-friendly message', async () => {
-      fromMock.mockReturnValue(
-        queryResult({ error: { code: '23503', message: 'FK violated' } }),
-      )
-      await expect(deleteRewardTier('tier-1')).rejects.toThrow(
-        "This reward has already been redeemed, so it can't be deleted.",
-      )
+    it('archives (active=false) a redeemed tier and reports "archived"', async () => {
+      // First call (delete) hits the FK restrict; second call (update) succeeds.
+      const deleteBuilder = queryResult({ error: { code: '23503', message: 'FK' } })
+      const archiveBuilder = queryResult({ error: null })
+      fromMock
+        .mockReturnValueOnce(deleteBuilder)
+        .mockReturnValueOnce(archiveBuilder)
+
+      await expect(removeRewardTier('tier-1')).resolves.toBe('archived')
+      expect(archiveBuilder.update).toHaveBeenCalledWith({ active: false })
+      expect(archiveBuilder.eq).toHaveBeenCalledWith('id', 'tier-1')
     })
 
-    it('surfaces other DB errors via their message', async () => {
+    it('surfaces non-FK delete errors via their message', async () => {
       fromMock.mockReturnValue(
         queryResult({ error: { code: '500', message: 'database exploded' } }),
       )
-      await expect(deleteRewardTier('tier-1')).rejects.toThrow('database exploded')
+      await expect(removeRewardTier('tier-1')).rejects.toThrow('database exploded')
+    })
+
+    it('surfaces an archive failure that follows the FK block', async () => {
+      fromMock
+        .mockReturnValueOnce(queryResult({ error: { code: '23503', message: 'FK' } }))
+        .mockReturnValueOnce(
+          queryResult({ error: { code: '500', message: 'archive failed' } }),
+        )
+      await expect(removeRewardTier('tier-1')).rejects.toThrow('archive failed')
+    })
+  })
+
+  describe('setRewardTierActive', () => {
+    it('restores a tier by setting active=true on the id', async () => {
+      const builder = queryResult({ error: null })
+      fromMock.mockReturnValue(builder)
+
+      await setRewardTierActive('tier-1', true)
+
+      expect(builder.update).toHaveBeenCalledWith({ active: true })
+      expect(builder.eq).toHaveBeenCalledWith('id', 'tier-1')
+    })
+
+    it('throws when the update fails', async () => {
+      fromMock.mockReturnValue(
+        queryResult({ error: { code: '500', message: 'update failed' } }),
+      )
+      await expect(setRewardTierActive('tier-1', false)).rejects.toThrow(
+        'update failed',
+      )
     })
   })
 })

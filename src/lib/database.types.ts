@@ -260,6 +260,7 @@ export type Database = {
       }
       reward_tier: {
         Row: {
+          active: boolean
           created_at: string
           household_id: string
           id: string
@@ -268,6 +269,7 @@ export type Database = {
           threshold: number
         }
         Insert: {
+          active?: boolean
           created_at?: string
           household_id: string
           id?: string
@@ -276,6 +278,7 @@ export type Database = {
           threshold: number
         }
         Update: {
+          active?: boolean
           created_at?: string
           household_id?: string
           id?: string
