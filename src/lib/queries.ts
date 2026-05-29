@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import type { Database } from './database.types'
 import type { Household, Kid, Parent, RewardTier, StickerEvent } from './types'
 import type { StickerPosition } from './stickerPlacement'
 
@@ -240,19 +241,42 @@ export async function redeemChapter(args: RedeemChapterArgs): Promise<string> {
   return data as string
 }
 
-export async function createHousehold(args: {
+export interface CreateHouseholdArgs {
   householdName: string
   parentName: string
   kidName: string
-}): Promise<void> {
-  const { error } = await supabase.rpc('create_household', {
+  birthdate?: string | null
+  choreNames?: string[]
+  rewardName?: string | null
+  rewardThreshold?: number | null
+}
+
+export async function createHousehold(args: CreateHouseholdArgs): Promise<string> {
+  const rpcArgs: Database['public']['Functions']['create_household']['Args'] = {
     p_household_name: args.householdName,
     p_parent_name: args.parentName,
     p_kid_name: args.kidName,
-  })
+  }
+  if (args.birthdate != null) {
+    rpcArgs.p_birthdate = args.birthdate
+  }
+  if (args.choreNames?.length) {
+    rpcArgs.p_chore_names = args.choreNames
+  }
+  if (args.rewardName) {
+    rpcArgs.p_reward_name = args.rewardName
+  }
+  if (args.rewardThreshold != null) {
+    rpcArgs.p_reward_threshold = args.rewardThreshold
+  }
+  const { data, error } = await supabase.rpc('create_household', rpcArgs)
   if (error) {
     throw error
   }
+  if (typeof data !== 'string') {
+    throw new Error('create_household returned no household id')
+  }
+  return data
 }
 
 export type BoardDisplayMode = 'focused' | 'side_by_side'

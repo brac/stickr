@@ -132,6 +132,7 @@ export type Database = {
         Row: {
           avatar_emoji: string | null
           avatar_path: string | null
+          birthdate: string | null
           created_at: string
           current_balance: number
           current_chapter_id: string | null
@@ -142,6 +143,7 @@ export type Database = {
         Insert: {
           avatar_emoji?: string | null
           avatar_path?: string | null
+          birthdate?: string | null
           created_at?: string
           current_balance?: number
           current_chapter_id?: string | null
@@ -152,6 +154,7 @@ export type Database = {
         Update: {
           avatar_emoji?: string | null
           avatar_path?: string | null
+          birthdate?: string | null
           created_at?: string
           current_balance?: number
           current_chapter_id?: string | null
@@ -460,6 +463,10 @@ export type Database = {
           p_household_name: string
           p_kid_name: string
           p_parent_name: string
+          p_birthdate?: string | null
+          p_chore_names?: string[] | null
+          p_reward_name?: string | null
+          p_reward_threshold?: number | null
         }
         Returns: string
       }

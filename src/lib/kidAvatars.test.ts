@@ -38,6 +38,7 @@ function kid(overrides: Partial<Kid> = {}): Kid {
     current_chapter_id: null,
     avatar_path: null,
     avatar_emoji: null,
+    birthdate: null,
     created_at: '2026-01-01',
     ...overrides,
   }

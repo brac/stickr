@@ -44,11 +44,19 @@ test.describe('core loop: award → board → redeem', () => {
     await page.locator('#password').fill(password)
     await page.locator('form').getByRole('button', { name: 'Sign up' }).click()
 
-    // --- Onboarding: create a household ---
+    // --- Onboarding: walk the create-household wizard ---
     await page.waitForURL(/\/onboarding$/)
+    // Step 1 — household + you.
     await page.locator('#household').fill('The E2E Household')
-    await page.locator('#kid').fill('Pip')
     await page.locator('#parent').fill('Alex')
+    await page.getByRole('button', { name: 'Next' }).click()
+    // Step 2 — kid + age band.
+    await page.locator('#kid').fill('Pip')
+    await page.getByRole('button', { name: '2–3', exact: true }).click()
+    await page.getByRole('button', { name: 'Next' }).click()
+    // Step 3 — chores preselected for the band; accept the defaults.
+    await page.getByRole('button', { name: 'Next' }).click()
+    // Step 4 — reward (prefilled); submit.
     await page.getByRole('button', { name: 'Create household' }).click()
 
     // Lands on the board.
@@ -98,7 +106,8 @@ test.describe('core loop: award → board → redeem', () => {
   }) => {
     const email = `e2e-mk-${Date.now()}@example.com`
 
-    // Sign up + onboard (creates household with kid "Pip" and a "Good job" chore).
+    // Sign up + onboard. The wizard seeds the band's starter chores; we award the
+    // first one ("Put toys in bin" for the 2–3 band) below.
     await page.goto('/signin')
     await page.getByRole('button', { name: 'Sign up' }).click()
     await page.locator('#email').fill(email)
@@ -106,9 +115,17 @@ test.describe('core loop: award → board → redeem', () => {
     await page.locator('form').getByRole('button', { name: 'Sign up' }).click()
 
     await page.waitForURL(/\/onboarding$/)
+    // Step 1 — household + you.
     await page.locator('#household').fill('Two-Kid Household')
-    await page.locator('#kid').fill('Pip')
     await page.locator('#parent').fill('Alex')
+    await page.getByRole('button', { name: 'Next' }).click()
+    // Step 2 — kid + age band.
+    await page.locator('#kid').fill('Pip')
+    await page.getByRole('button', { name: '2–3', exact: true }).click()
+    await page.getByRole('button', { name: 'Next' }).click()
+    // Step 3 — chores preselected for the band; accept the defaults.
+    await page.getByRole('button', { name: 'Next' }).click()
+    // Step 4 — reward (prefilled); submit.
     await page.getByRole('button', { name: 'Create household' }).click()
     await page.waitForURL((url) => url.pathname === '/')
 
@@ -131,13 +148,13 @@ test.describe('core loop: award → board → redeem', () => {
     await expect(tabs.getByRole('tab', { name: 'Mo' })).toBeVisible()
 
     // Award to Pip (selected by default).
-    await page.getByRole('button', { name: /Good job/ }).click()
+    await page.getByRole('button', { name: /Put toys in bin/ }).click()
     await expect(page.getByTestId('sticker')).toHaveCount(1)
 
     // Switch to Mo — independent, empty board — then award.
     await tabs.getByRole('tab', { name: 'Mo' }).click()
     await expect(page.getByTestId('sticker')).toHaveCount(0)
-    await page.getByRole('button', { name: /Good job/ }).click()
+    await page.getByRole('button', { name: /Put toys in bin/ }).click()
     await expect(page.getByTestId('sticker')).toHaveCount(1)
 
     // Back to Pip — its sticker persisted.

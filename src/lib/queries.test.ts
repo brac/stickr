@@ -295,7 +295,7 @@ describe('rpc wrappers', () => {
   })
 
   it('createHousehold forwards named args and resolves on success', async () => {
-    rpcMock.mockResolvedValue({ error: null })
+    rpcMock.mockResolvedValue({ data: 'hh-id', error: null })
     await createHousehold({
       householdName: 'Home',
       parentName: 'Pat',
@@ -318,6 +318,47 @@ describe('rpc wrappers', () => {
         kidName: 'Kit',
       }),
     ).rejects.toBe(error)
+  })
+
+  it('createHousehold forwards the full arg set and returns the household id', async () => {
+    rpcMock.mockResolvedValue({ data: 'hh-id', error: null })
+    const id = await createHousehold({
+      householdName: 'Home',
+      parentName: 'Pat',
+      kidName: 'Kit',
+      birthdate: '2023-01-15',
+      choreNames: ['Brush teeth', 'Tidy up'],
+      rewardName: 'Big reward',
+      rewardThreshold: 10,
+    })
+    expect(id).toBe('hh-id')
+    expect(rpcMock).toHaveBeenCalledWith('create_household', {
+      p_household_name: 'Home',
+      p_parent_name: 'Pat',
+      p_kid_name: 'Kit',
+      p_birthdate: '2023-01-15',
+      p_chore_names: ['Brush teeth', 'Tidy up'],
+      p_reward_name: 'Big reward',
+      p_reward_threshold: 10,
+    })
+  })
+
+  it('createHousehold omits empty choreNames and blank rewardName', async () => {
+    rpcMock.mockResolvedValue({ data: 'hh-id', error: null })
+    await createHousehold({
+      householdName: 'Home',
+      parentName: 'Pat',
+      kidName: 'Kit',
+      birthdate: null,
+      choreNames: [],
+      rewardName: '',
+      rewardThreshold: null,
+    })
+    expect(rpcMock).toHaveBeenCalledWith('create_household', {
+      p_household_name: 'Home',
+      p_parent_name: 'Pat',
+      p_kid_name: 'Kit',
+    })
   })
 
   it('joinHousehold forwards the join code and parent name', async () => {
