@@ -8,7 +8,7 @@ import {
   stickerImageUrl,
   uploadStickerImage,
 } from '../lib/stickerImages'
-import { autoCropTransparent, removeImageBackground } from '../lib/imageProcessing'
+import { makePhotoSticker } from '../lib/imageProcessing'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { StickerImage } from '../lib/types'
@@ -16,6 +16,7 @@ import type { StickerImage } from '../lib/types'
 interface Preview {
   url: string
   blob: Blob
+  backgroundRemoved: boolean
 }
 
 export function StickerLibrary() {
@@ -76,10 +77,13 @@ export function StickerLibrary() {
     if (!file) return
     setProcessing(true)
     try {
-      const cutout = await removeImageBackground(file)
-      // Crop away the transparent margin so the subject fills the sticker.
-      const cropped = await autoCropTransparent(cutout)
-      setPreview({ url: URL.createObjectURL(cropped), blob: cropped })
+      const { blob, backgroundRemoved } = await makePhotoSticker(file)
+      setPreview({ url: URL.createObjectURL(blob), blob, backgroundRemoved })
+      if (!backgroundRemoved) {
+        toast.info(
+          "Couldn't remove the background on this device — using the full photo.",
+        )
+      }
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -214,7 +218,9 @@ export function StickerLibrary() {
               Use this sticker?
             </h2>
             <p className="mt-1 text-center text-sm text-ink-muted">
-              Background removed. Transparent areas show as a checkerboard.
+              {preview.backgroundRemoved
+                ? 'Background removed. Transparent areas show as a checkerboard.'
+                : "Couldn't remove the background on this device — using the full photo."}
             </p>
             <div className="checkerboard mx-auto mt-4 flex aspect-square w-48 items-center justify-center overflow-hidden rounded-xl border border-black/10">
               <img

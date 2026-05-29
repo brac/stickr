@@ -1,9 +1,5 @@
 import { useRef, useState, type ChangeEvent } from 'react'
-import {
-  addStickerBorder,
-  autoCropTransparent,
-  removeImageBackground,
-} from '../lib/imageProcessing'
+import { makeAvatarSticker } from '../lib/imageProcessing'
 import {
   removeKidAvatar,
   setKidAvatarEmoji,
@@ -31,6 +27,7 @@ interface KidAvatarEditorProps {
 interface Preview {
   url: string
   blob: Blob
+  backgroundRemoved: boolean
 }
 
 export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProps) {
@@ -49,11 +46,13 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
     if (!file) return
     setProcessing(true)
     try {
-      const cutout = await removeImageBackground(file)
-      const cropped = await autoCropTransparent(cutout)
-      // Bake the white die-cut border so the preview shows the real result.
-      const bordered = await addStickerBorder(cropped)
-      setPreview({ url: URL.createObjectURL(bordered), blob: bordered })
+      const { blob, backgroundRemoved } = await makeAvatarSticker(file)
+      setPreview({ url: URL.createObjectURL(blob), blob, backgroundRemoved })
+      if (!backgroundRemoved) {
+        toast.info(
+          "Couldn't remove the background on this device — using the full photo.",
+        )
+      }
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -146,8 +145,9 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
         {preview ? (
           <>
             <p className="mt-1 text-center text-sm text-ink-muted">
-              Background removed with a die-cut border. This is {kid.name}&rsquo;s
-              sticker.
+              {preview.backgroundRemoved
+                ? `Background removed with a die-cut border. This is ${kid.name}’s sticker.`
+                : `The full photo with a die-cut border. This is ${kid.name}’s sticker.`}
             </p>
             <div className="mx-auto mt-4 flex h-40 w-40 items-center justify-center overflow-hidden rounded-2xl border border-black/10 bg-black/5">
               <img

@@ -24,12 +24,99 @@ const STICKER_BORDER_RATIO = 0.06
 // of the main bundle and only downloads the first time a parent takes a photo
 // (then it's cached by the browser). Feed the result through
 // processStickerImage() to resize + re-encode before upload.
+//
+// Config notes — these are tuned for the lowest-end target (iOS Safari in an
+// installed PWA), which is where background removal most often fails with "no
+// available backend":
+//   - model 'isnet_quint8' is the smallest, quantized model. The default
+//     (fp16) can exceed iOS Safari's per-tab WASM memory ceiling and fail to
+//     instantiate the ONNX backend. quint8 trades a little edge quality for a
+//     much smaller memory footprint — the right call for a 256px sticker.
+//   - device 'cpu' pins the WASM/CPU backend. iOS has no stable WebGPU, so
+//     don't let the lib probe for one.
+// If this still fails on a device, callers fall back to the un-cut photo (see
+// makeAvatarSticker / makePhotoSticker), so the feature degrades instead of
+// hard-failing.
 export async function removeImageBackground(file: File): Promise<Blob> {
   if (!file.type.startsWith('image/')) {
     throw new Error('Please choose an image file.')
   }
   const { removeBackground } = await import('@imgly/background-removal')
-  return removeBackground(file)
+  return removeBackground(file, {
+    model: 'isnet_quint8',
+    device: 'cpu',
+    output: { format: 'image/png' },
+  })
+}
+
+// Center-crop the largest square out of a photo (object-cover style), as an
+// opaque PNG. Used as the fallback when background removal is unavailable on
+// the device: the subject won't be cut out, but the sticker is still square and
+// usable. Unlike autoCropTransparent (which letterboxes around an alpha
+// silhouette), this crops a fully-opaque photo so there are no transparent bars.
+async function cropToSquareCover(file: File): Promise<Blob> {
+  const bitmap = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  try {
+    const side = Math.min(bitmap.width, bitmap.height)
+    const sx = Math.round((bitmap.width - side) / 2)
+    const sy = Math.round((bitmap.height - side) / 2)
+    const canvas = document.createElement('canvas')
+    canvas.width = side
+    canvas.height = side
+    const ctx = canvas.getContext('2d')
+    if (!ctx) {
+      throw new Error('Could not process the image.')
+    }
+    ctx.drawImage(bitmap, sx, sy, side, side, 0, 0, side, side)
+    return await canvasToBlob(canvas, 'image/png', 1)
+  } finally {
+    bitmap.close()
+  }
+}
+
+export interface StickerCutoutResult {
+  blob: Blob
+  // false when background removal failed and we fell back to the full photo.
+  backgroundRemoved: boolean
+}
+
+// Run the cutout pipeline, degrading to the plain (square-cropped) photo if
+// background removal is unavailable on this device. Background removal is the
+// only fragile step here — a ~25 MB WASM model that some iOS Safari builds
+// can't instantiate — so any failure in it (or the crop that depends on its
+// transparency) drops to the fallback rather than erroring out. Non-image
+// inputs are rejected up front so a bad file still surfaces a clear message.
+async function cutoutOrFallback(file: File): Promise<StickerCutoutResult> {
+  if (!file.type.startsWith('image/')) {
+    throw new Error('Please choose an image file.')
+  }
+  try {
+    const cutout = await removeImageBackground(file)
+    const cropped = await autoCropTransparent(cutout)
+    return { blob: cropped, backgroundRemoved: true }
+  } catch (err) {
+    // Reported, not swallowed: this is the documented signal for the iOS
+    // background-removal failure. The user still gets a working sticker.
+    console.error(
+      '[imageProcessing] background removal unavailable; using the full photo',
+      err,
+    )
+    const square = await cropToSquareCover(file)
+    return { blob: square, backgroundRemoved: false }
+  }
+}
+
+// Avatar sticker: cutout (or fallback square) with the white die-cut border
+// baked on. On the fallback path the border frames the square photo.
+export async function makeAvatarSticker(file: File): Promise<StickerCutoutResult> {
+  const { blob, backgroundRemoved } = await cutoutOrFallback(file)
+  const bordered = await addStickerBorder(blob)
+  return { blob: bordered, backgroundRemoved }
+}
+
+// Library photo sticker: cutout (or fallback square), no border.
+export async function makePhotoSticker(file: File): Promise<StickerCutoutResult> {
+  return cutoutOrFallback(file)
 }
 
 // Tighten a transparent cutout to its subject and centre that subject in a

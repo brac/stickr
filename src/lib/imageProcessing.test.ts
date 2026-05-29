@@ -58,6 +58,10 @@ describe('removeImageBackground', () => {
     const file = fakeFile('image/jpeg', 1000)
 
     await expect(removeImageBackground(file)).resolves.toBe(cutout)
-    expect(removeBackgroundMock).toHaveBeenCalledWith(file)
+    // Passes the file plus the iOS-tuned config (smallest model, CPU backend).
+    expect(removeBackgroundMock).toHaveBeenCalledWith(
+      file,
+      expect.objectContaining({ model: 'isnet_quint8', device: 'cpu' }),
+    )
   })
 })
