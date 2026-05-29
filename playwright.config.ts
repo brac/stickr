@@ -7,7 +7,18 @@ import { defineConfig, devices } from '@playwright/test'
 // Defaults to the locally-running dev server. Set E2E_BASE_URL to point at an
 // alternate server — e.g. one started against a local Supabase stack for the
 // data-writing journey test.
-const baseURL = process.env.E2E_BASE_URL ?? 'http://localhost:5173'
+//
+// `npm run e2e:local` sets E2E_LOCAL=1 plus loopback VITE_SUPABASE_* vars. In
+// that mode we start our OWN dev server on a dedicated port that inherits those
+// vars, instead of reusing whatever the user's :5173 server happens to target.
+// That makes the full write/destructive suite runnable without hand-editing
+// .env.local — and guarantees it can never reach the hosted project.
+const isLocal = !!process.env.E2E_LOCAL
+const LOCAL_PORT = 5174
+const defaultURL = isLocal
+  ? `http://localhost:${LOCAL_PORT}`
+  : 'http://localhost:5173'
+const baseURL = process.env.E2E_BASE_URL ?? defaultURL
 
 export default defineConfig({
   testDir: './e2e',
@@ -23,9 +34,14 @@ export default defineConfig({
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   webServer: {
-    command: 'npm run dev',
+    // Local mode starts a fresh server bound to LOCAL_PORT so it inherits the
+    // loopback VITE_SUPABASE_* env from `npm run e2e:local` (never reusing the
+    // user's prod-pointed :5173). Otherwise reuse the running dev server.
+    command: isLocal
+      ? `vite --port ${LOCAL_PORT} --strictPort`
+      : 'npm run dev',
     url: baseURL,
-    reuseExistingServer: true,
+    reuseExistingServer: !isLocal,
     timeout: 120_000,
   },
 })

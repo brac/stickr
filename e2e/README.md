@@ -17,33 +17,50 @@ against a real Supabase backend.
 
 ## Running
 
-The suite targets the locally-running dev server (`http://localhost:5173`) and
-reuses it if it's already up (`reuseExistingServer`), matching the normal
-workflow of running `npm run dev` in a separate terminal.
+### The full suite against local Supabase (recommended)
 
 ```bash
-npm run e2e          # headless
+npm run e2e:local    # smoke + journey + account-deletion, all against local
+```
+
+`e2e:local` is self-contained: it starts its **own** dev server on `:5174`
+pointed at the local stack (`http://127.0.0.1:54321`) via inline
+`VITE_SUPABASE_*` env vars, and flips on the destructive opt-in
+(`E2E_ACCOUNT_DELETION=1`). You do **not** edit `.env.local` — that file stays
+on whatever you use for normal dev (typically the hosted project), and your
+`npm run dev` server on `:5173` is left untouched. The only prerequisites are
+that the local stack is up and migrated (see below).
+
+### Read-only / against whatever `:5173` already targets
+
+```bash
+npm run e2e          # headless; reuses the running `npm run dev` server
 npm run e2e:ui       # Playwright UI mode
 npm run e2e:report   # open the last HTML report
 ```
 
-## Prerequisite for the journey test
+Plain `npm run e2e` targets the locally-running dev server
+(`http://localhost:5173`) and reuses it if it's already up
+(`reuseExistingServer`). The smoke specs always run; the data-writing specs
+self-skip unless that server is pointed at local Supabase (so use `e2e:local`
+for those).
 
-The journey writes households, chores, rewards, and sticker events. It must run
-against a **local, disposable** Supabase — never the hosted project.
+## Prerequisite: a local, disposable Supabase stack
+
+The journey and account-deletion specs write (and delete) real rows, so they
+must run against a **local, disposable** Supabase — never the hosted project.
+`npm run e2e:local` handles pointing the app at it; you just need the stack up:
 
 1. Start the local stack (requires Docker):
    ```bash
    supabase start
    ```
 2. Apply migrations to it (`supabase db reset` or `supabase migration up`).
-3. Point the dev server at local Supabase — set `.env.local` to the values
-   printed by `supabase start`:
-   ```
-   VITE_SUPABASE_URL=http://127.0.0.1:54321
-   VITE_SUPABASE_ANON_KEY=<local anon key from `supabase start`>
-   ```
-   Restart `npm run dev` so it picks them up.
+
+That's it — `npm run e2e:local` supplies the loopback `VITE_SUPABASE_*` values
+itself. (If you instead run plain `npm run e2e`, you'd have to point the dev
+server at local by hand: set `.env.local` to the values printed by
+`supabase start` and restart `npm run dev`.)
 
 Email confirmations are disabled in `supabase/config.toml`
 (`enable_confirmations = false`), so the test signs up a fresh unique user and
@@ -61,18 +78,18 @@ actually talking to production.
 ## Prerequisite for the account-deletion test
 
 `account-deletion.spec.ts` deletes auth users and households, so on top of the
-journey prerequisites it needs:
+local-stack prerequisite it needs:
 
-1. The `delete-account` Edge Function served against the **same local stack**:
+1. The `delete-account` Edge Function served against the **same local stack**.
+   The edge runtime that `supabase start` brings up serves it automatically; if
+   yours doesn't, serve it explicitly:
    ```bash
    supabase functions serve delete-account
    ```
-   (or rely on the edge runtime that `supabase start` brings up, if present).
-2. The dev server pointed at that local stack (same `.env.local` as above) — so
-   the destructive flow hits local, not the hosted project.
-3. Explicit opt-in, because it is destructive:
+2. Explicit opt-in, because it is destructive. `npm run e2e:local` sets this for
+   you (`E2E_ACCOUNT_DELETION=1`); to run the spec on its own:
    ```bash
-   E2E_ACCOUNT_DELETION=1 npm run e2e -- account-deletion.spec.ts
+   npm run e2e:local -- account-deletion.spec.ts
    ```
 
 Without the opt-in flag, or if the local function isn't served (probe returns

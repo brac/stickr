@@ -11,6 +11,7 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "e2e": "playwright test",
+    "e2e:local": "E2E_LOCAL=1 E2E_ACCOUNT_DELETION=1 VITE_SUPABASE_URL=http://127.0.0.1:54321 VITE_SUPABASE_ANON_KEY=sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH playwright test",
     "e2e:ui": "playwright test --ui",
     "e2e:report": "playwright show-report",
     "preview": "vite preview",
