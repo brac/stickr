@@ -7,6 +7,7 @@ import {
   type BoardLayout,
 } from '../lib/stickerPlacement'
 import { pickStickerArt } from '../lib/stickerCatalog'
+import { jostle } from '../lib/juice'
 import type { StickerEvent } from '../lib/types'
 
 // Fallback colors only used if the sticker catalog ever becomes empty
@@ -61,6 +62,21 @@ export function StickerBoard({
     return () => window.clearTimeout(timeout)
   }, [events.length])
 
+  // The jostle anchor is the just-landed sticker: the highest render index whose
+  // id is in newIds. Already-placed neighbours wobble around it (with falloff);
+  // the anchor itself slams in and does not jostle. jostleNonce changes on each
+  // award (it carries the anchor's id) so the per-Sticker effect re-fires.
+  let jostleAnchorIndex: number | null = null
+  let jostleNonce = ''
+  if (newIds && newIds.size > 0) {
+    for (let i = 0; i < events.length; i++) {
+      if (newIds.has(events[i].id)) {
+        jostleAnchorIndex = i
+        jostleNonce = events[i].id
+      }
+    }
+  }
+
   return (
     <div
       className={`corkboard relative w-full overflow-hidden${kicking ? ' board-kick' : ''}`}
@@ -76,6 +92,7 @@ export function StickerBoard({
         return (
           <Sticker
             key={event.id}
+            index={index}
             seedId={event.id}
             x={pos.x}
             y={pos.y}
@@ -83,6 +100,9 @@ export function StickerBoard({
             artUrl={art}
             isNew={newIds?.has(event.id) ?? false}
             interactive={interactive}
+            rowSize={layout.rowSize}
+            jostleAnchorIndex={jostleAnchorIndex}
+            jostleNonce={jostleNonce}
           />
         )
       })}
@@ -96,6 +116,7 @@ export function StickerBoard({
 }
 
 interface StickerProps {
+  index: number
   seedId: string
   x: number
   y: number
@@ -103,9 +124,41 @@ interface StickerProps {
   artUrl: string | null
   isNew: boolean
   interactive: boolean
+  rowSize: number
+  // The just-landed sticker's render index (or null when nothing is new), and a
+  // nonce that changes each award so the neighbour-jostle effect re-fires.
+  jostleAnchorIndex: number | null
+  jostleNonce: string
 }
 
-function Sticker({ seedId, x, y, rotation, artUrl, isNew, interactive }: StickerProps) {
+// Falloff by Chebyshev ring distance from the just-landed anchor on the sticker
+// grid: ring 1 -> full wobble, ring 2 -> half, ring 3 -> quarter, beyond -> none.
+// Farther neighbours jostle less.
+function jostleIntensity(index: number, anchorIndex: number, rowSize: number): number {
+  const row = Math.floor(index / rowSize)
+  const col = index % rowSize
+  const anchorRow = Math.floor(anchorIndex / rowSize)
+  const anchorCol = anchorIndex % rowSize
+  const ring = Math.max(Math.abs(row - anchorRow), Math.abs(col - anchorCol))
+  if (ring === 1) return 1
+  if (ring === 2) return 0.5
+  if (ring === 3) return 0.25
+  return 0
+}
+
+function Sticker({
+  index,
+  seedId,
+  x,
+  y,
+  rotation,
+  artUrl,
+  isNew,
+  interactive,
+  rowSize,
+  jostleAnchorIndex,
+  jostleNonce,
+}: StickerProps) {
   // Capture the entrance once, at mount: a freshly awarded sticker drops in,
   // everything else gets the gentle pop. Frozen so a later prop change (e.g. the
   // parent clearing newIds) can't retrigger the animation.
@@ -113,6 +166,25 @@ function Sticker({ seedId, x, y, rotation, artUrl, isNew, interactive }: Sticker
   // Freeze the impact ring at mount like the entrance, so a later newIds clear
   // can't retrigger or yank it mid-animation.
   const [showRing] = useState(() => isNew)
+  // Freeze the landing sparkles at mount, mirroring the ring: only a freshly
+  // awarded sticker emits them, and a later newIds clear can't retrigger.
+  const [showSparkles] = useState(() => isNew)
+  // Inner wrapper for the non-interactive (parent award) path. jostle() transforms
+  // this element, never the positioned div, so the sticker's placement is untouched.
+  const jostleRef = useRef<HTMLSpanElement | null>(null)
+
+  // Neighbour jostle with falloff. Re-fires whenever a sticker lands (jostleNonce
+  // changes). The anchor and any just-new sticker slam in and must not jostle.
+  useEffect(() => {
+    if (jostleAnchorIndex == null) return
+    if (index === jostleAnchorIndex) return
+    if (isNew) return
+    const intensity = jostleIntensity(index, jostleAnchorIndex, rowSize)
+    if (intensity <= 0) return
+    if (jostleRef.current) jostle(jostleRef.current, intensity)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jostleNonce])
+
   const style: CSSProperties & Record<'--x' | '--y' | '--rot', string> = {
     width: STICKER_SIZE,
     height: STICKER_SIZE,
@@ -138,9 +210,50 @@ function Sticker({ seedId, x, y, rotation, artUrl, isNew, interactive }: Sticker
       style={style}
       data-testid="sticker"
     >
-      {interactive ? <InteractiveArt seedId={seedId}>{art}</InteractiveArt> : art}
+      {/* Sparkles render BEFORE the art so the art paints on top (sparkles behind). */}
+      {showSparkles && <SparkleBurst seedId={seedId} />}
+      {interactive ? (
+        <InteractiveArt seedId={seedId}>{art}</InteractiveArt>
+      ) : (
+        <span ref={jostleRef} className="sticker-jostle-layer">
+          {art}
+        </span>
+      )}
       {showRing && <span className="impact-ring" aria-hidden="true" />}
     </div>
+  )
+}
+
+// How many sparkle dots a freshly awarded sticker flings outward.
+const SPARKLE_COUNT = 6
+// Outward fling distance range (px) for sparkle dots.
+const SPARKLE_MIN_DIST = 18
+const SPARKLE_MAX_DIST = 34
+
+// Landing sparkles: a few dots fling outward and fade behind the sticker art.
+// Vectors are seeded from the event id (via hashStringToSeed) so the burst is
+// deterministic per sticker. Each dot animates transform + opacity only.
+function SparkleBurst({ seedId }: { seedId: string }) {
+  const seed = hashStringToSeed(seedId)
+  const dots = Array.from({ length: SPARKLE_COUNT }, (_, i) => {
+    // Spread dots roughly evenly around the circle, with a seeded angular jitter.
+    const baseAngle = (i / SPARKLE_COUNT) * Math.PI * 2
+    const jitter = (((seed >> i) % 13) - 6) * 0.08 // ~ -0.48..+0.48 rad
+    const angle = baseAngle + jitter
+    const distSeed = (seed >> (i + 3)) % 17 // 0..16
+    const dist = SPARKLE_MIN_DIST + (distSeed / 16) * (SPARKLE_MAX_DIST - SPARKLE_MIN_DIST)
+    const dx = `${Math.round(Math.cos(angle) * dist)}px`
+    const dy = `${Math.round(Math.sin(angle) * dist)}px`
+    const style: CSSProperties & Record<'--dx' | '--dy', string> = {
+      '--dx': dx,
+      '--dy': dy,
+    }
+    return <span key={i} className="sparkle" style={style} />
+  })
+  return (
+    <span className="sparkle-burst" aria-hidden="true">
+      {dots}
+    </span>
   )
 }
 

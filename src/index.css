@@ -147,6 +147,52 @@ body {
   }
 }
 
+/* EFFECT 1 — Neighbor jostle inner wrapper. The actual wobble is driven by
+   juice.ts via the Web Animations API (transform only, no fill, returns to
+   rest). This is just the inner layer that wraps the art on the non-interactive
+   board path, so jostle() can transform it without touching the positioned
+   div's translate/rotate. */
+.sticker-jostle-layer {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* EFFECT 2 — Landing sparkles. A freshly awarded sticker emits a few dots that
+   fling outward and fade. The .sparkle-burst container is rendered in the DOM
+   BEFORE the art element, so the art paints on top (no negative z-index). Each
+   .sparkle carries a per-dot seeded --dx/--dy. transform + opacity only. */
+.sparkle-burst {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.sparkle {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  height: 6px;
+  width: 6px;
+  border-radius: 9999px;
+  background: oklch(80% 0.16 80 / 0.95);
+  will-change: transform, opacity;
+  animation: sparkle-fly 480ms ease-out both;
+}
+@keyframes sparkle-fly {
+  0% {
+    transform: translate(-50%, -50%) scale(0.2);
+    opacity: 0;
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy)))
+      scale(1);
+    opacity: 0;
+  }
+}
+
 /* One-shot nudge applied to the .corkboard container when a new sticker lands.
    translateY only — the board dips and springs back. */
 .board-kick {
@@ -181,6 +227,33 @@ body {
     transform: scale(1);
   }
 }
+/* EFFECT 4 — Redemption gloss sweep. A specular shine that sweeps diagonally
+   across the Claim confirm button when redeeming. .gloss-host clips the shine
+   to the button bounds; .gloss-sweep slides the static gradient across via
+   transform only (the gradient itself never animates). */
+.gloss-host {
+  position: relative;
+  overflow: hidden;
+}
+.gloss-sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  transform: translateX(-160%);
+  background: linear-gradient(
+    115deg,
+    transparent 35%,
+    rgba(255, 255, 255, 0.55) 50%,
+    transparent 65%
+  );
+  animation: gloss-sweep 650ms ease-out both;
+}
+@keyframes gloss-sweep {
+  to {
+    transform: translateX(160%);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .sticker-pop,
   .sticker-drop,
@@ -190,6 +263,16 @@ body {
   }
   /* Never show the ring statically — it has no instant equivalent. */
   .impact-ring {
+    display: none;
+  }
+  /* Sparkles + gloss have no instant equivalent: kill the animation AND hide
+     the containers so nothing lingers statically. */
+  .sparkle,
+  .gloss-sweep {
+    animation: none;
+  }
+  .sparkle-burst,
+  .gloss-sweep {
     display: none;
   }
 }

@@ -309,7 +309,7 @@ export function Home() {
               type="button"
               disabled={awardingId !== null}
               onClick={() => void handleAward(chore)}
-              className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] bg-accent px-4 py-5 font-medium text-white shadow-sm transition-transform active:scale-95 disabled:opacity-60"
+              className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] bg-accent px-4 py-5 font-medium text-white shadow-sm transition-[transform,filter] duration-100 ease-out active:scale-[0.94] active:brightness-90 disabled:opacity-60"
             >
               {choreImage && (
                 <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-white/15">
@@ -331,7 +331,7 @@ export function Home() {
           type="button"
           disabled={awardingId !== null}
           onClick={() => setShowCustom(true)}
-          className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 border-dashed border-accent/40 px-4 py-5 font-medium text-accent transition-[transform,colors] hover:border-accent hover:bg-accent/5 active:scale-95 disabled:opacity-60"
+          className="flex flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border-2 border-dashed border-accent/40 px-4 py-5 font-medium text-accent transition-[transform,filter,colors] duration-100 ease-out hover:border-accent hover:bg-accent/5 active:scale-[0.94] active:brightness-90 disabled:opacity-60"
         >
           <span className="flex h-14 w-14 items-center justify-center rounded-xl bg-accent/10 text-2xl leading-none">
             +

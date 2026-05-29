@@ -74,8 +74,9 @@ export function RedemptionSheet({ tiers, total, onRedeem, onClose }: RedemptionS
           type="button"
           disabled={!selected || redeeming}
           onClick={() => void handleConfirm()}
-          className="mt-5 w-full rounded-xl bg-accent py-4 font-semibold text-white transition-opacity disabled:opacity-40 active:opacity-80"
+          className="gloss-host mt-5 w-full rounded-xl bg-accent py-4 font-semibold text-white transition-opacity disabled:opacity-40 active:opacity-80"
         >
+          {redeeming && <span className="gloss-sweep" aria-hidden="true" />}
           {redeeming ? 'Claiming…' : selected ? `Claim "${selected.name}"` : 'Select a reward'}
         </button>
       </div>
