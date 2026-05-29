@@ -386,6 +386,13 @@ deno_version = 2
 [functions.send-award-push]
 verify_jwt = false
 
+# delete-account is called from the browser by a signed-in parent. JWT
+# verification stays ON so the gateway rejects unauthenticated callers; the
+# function additionally resolves the parent from the JWT and runs deletion with
+# the service role.
+[functions.delete-account]
+verify_jwt = true
+
 [analytics]
 enabled = true
 port = 54327

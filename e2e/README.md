@@ -10,6 +10,10 @@ against a real Supabase backend.
 - `journey.spec.ts` — the full v1 loop: sign up → onboard → define a chore +
   reward → award → redeem → board archives. **Writes real rows**, so it
   self-skips unless a local Supabase stack is reachable.
+- `account-deletion.spec.ts` — Feature 16: sole-parent household teardown and
+  co-parent removal through the danger zone. **Destructive** (deletes auth users
+  and whole households) and additionally needs the `delete-account` Edge Function
+  served locally. Guarded so it can never hit the hosted project — see below.
 
 ## Running
 
@@ -47,3 +51,24 @@ gets a session immediately — no inbox step.
 
 If local Supabase isn't reachable on `127.0.0.1:54321`, the journey test skips
 with a message and only the smoke tests run.
+
+## Prerequisite for the account-deletion test
+
+`account-deletion.spec.ts` deletes auth users and households, so on top of the
+journey prerequisites it needs:
+
+1. The `delete-account` Edge Function served against the **same local stack**:
+   ```bash
+   supabase functions serve delete-account
+   ```
+   (or rely on the edge runtime that `supabase start` brings up, if present).
+2. The dev server pointed at that local stack (same `.env.local` as above) — so
+   the destructive flow hits local, not the hosted project.
+3. Explicit opt-in, because it is destructive:
+   ```bash
+   E2E_ACCOUNT_DELETION=1 npm run e2e -- account-deletion.spec.ts
+   ```
+
+Without the opt-in flag, or if the local function isn't served (probe returns
+503 / unreachable), the whole spec self-skips. It never runs against a remote
+project.
