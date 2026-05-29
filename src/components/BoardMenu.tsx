@@ -75,7 +75,7 @@ export function BoardMenu({
             onClick={() => runAndClose(onKidView)}
             className="block w-full px-4 py-2.5 text-left text-sm text-ink transition-colors hover:bg-black/5"
           >
-            Kid view (for TV)
+            Kid view
           </button>
           <div className="my-1 border-t border-black/5" />
           <button
