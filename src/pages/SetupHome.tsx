@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { SetupShell } from '../components/SetupShell'
 import { InstallPrompt } from '../components/InstallPrompt'
+import { NotificationsToggle } from '../components/NotificationsToggle'
 
 const LINKS = [
   {
@@ -48,6 +49,7 @@ export function SetupHome() {
         ))}
       </nav>
 
+      <NotificationsToggle />
       <InstallPrompt />
     </SetupShell>
   )

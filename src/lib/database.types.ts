@@ -202,6 +202,41 @@ export type Database = {
           },
         ]
       }
+      push_subscription: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          parent_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          parent_id: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          parent_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscription_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "parent"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       redemption_event: {
         Row: {
           chapter_id: string

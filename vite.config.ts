@@ -23,6 +23,10 @@ export default defineConfig({
         // first use); precaching it would bloat the install for a rarely-used
         // path.
         globIgnores: ['**/ort-*.wasm', '**/*.onnx'],
+        // Pull our push/notification-click handlers into the generated SW. The
+        // file lives in public/ so it's served from the origin root. Keeping the
+        // autoUpdate generateSW strategy avoids hand-maintaining the precache.
+        importScripts: ['/push-sw.js'],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/.*/i,

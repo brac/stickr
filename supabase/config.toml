@@ -380,6 +380,12 @@ deno_version = 2
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
+# Award-push sender. Called by a database webhook on sticker_event INSERT, not by
+# a signed-in user, so JWT verification is off — it authenticates the caller with
+# a shared PUSH_WEBHOOK_SECRET header instead.
+[functions.send-award-push]
+verify_jwt = false
+
 [analytics]
 enabled = true
 port = 54327
