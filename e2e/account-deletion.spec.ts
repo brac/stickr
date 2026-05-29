@@ -1,20 +1,25 @@
 import { test, expect, type Page } from '@playwright/test'
+import {
+  LOCAL_SUPABASE_URL,
+  appTargetsLocalSupabase,
+  blockNonLocalSupabase,
+} from './supabase-env'
 
 // Feature 16 — in-app account deletion, end to end through the real UI.
 //
 // This is DESTRUCTIVE: it deletes auth users and, for the sole-parent case,
 // whole households. It must only ever run against a LOCAL, disposable Supabase
 // stack with the `delete-account` Edge Function served — never the hosted
-// project. It is therefore guarded three ways and self-skips unless all hold:
+// project. It is therefore guarded and self-skips unless all hold:
 //
 //   1. Explicit opt-in:  E2E_ACCOUNT_DELETION=1
-//   2. Local edge runtime is serving delete-account (probe ≠ 503/unreachable)
-//   3. (implied) the dev server under test points at that SAME local stack
+//   2. The dev server under test is configured for a loopback Supabase
+//   3. The local edge runtime is serving delete-account (probe ≠ 503/unreachable)
 //
+// blockNonLocalSupabase() is installed on every page as a hard net: even if the
+// guards were somehow satisfied wrongly, no request can reach the hosted project.
 // See e2e/README.md for the one-time local setup.
 
-const LOCAL_SUPABASE_URL =
-  process.env.E2E_SUPABASE_URL ?? 'http://127.0.0.1:54321'
 const OPTED_IN = process.env.E2E_ACCOUNT_DELETION === '1'
 const PASSWORD = 'sticker-test-123'
 
@@ -67,9 +72,17 @@ test.describe('account deletion (Feature 16)', () => {
       'Destructive — set E2E_ACCOUNT_DELETION=1 and point the dev server at a local stack (see e2e/README.md)',
     )
     test.skip(
+      !appTargetsLocalSupabase(),
+      'Dev server is not configured for a local Supabase (VITE_SUPABASE_URL is not loopback) — see e2e/README.md',
+    )
+    test.skip(
       !(await localFunctionServed()),
       'Local delete-account function not served on 127.0.0.1:54321 — see e2e/README.md',
     )
+  })
+
+  test.beforeEach(async ({ page }) => {
+    await blockNonLocalSupabase(page)
   })
 
   test('sole parent: deletes the whole household and the auth user', async ({
@@ -110,6 +123,7 @@ test.describe('account deletion (Feature 16)', () => {
     // --- Parent A creates the household and grabs the invite code ---
     const ctxA = await browser.newContext()
     const pageA = await ctxA.newPage()
+    await blockNonLocalSupabase(pageA)
     await signUp(pageA, ownerEmail)
     await createHousehold(pageA, { household, kid: 'Pip', parent: 'Alex' })
     await pageA.goto('/setup/household')
@@ -121,6 +135,7 @@ test.describe('account deletion (Feature 16)', () => {
     // --- Parent B joins the same household ---
     const ctxB = await browser.newContext()
     const pageB = await ctxB.newPage()
+    await blockNonLocalSupabase(pageB)
     await signUp(pageB, leaverEmail)
     await pageB.getByRole('button', { name: 'Join existing' }).click()
     await pageB.locator('#code').fill(code)

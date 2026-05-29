@@ -1,32 +1,34 @@
 import { test, expect } from '@playwright/test'
+import {
+  appTargetsLocalSupabase,
+  blockNonLocalSupabase,
+  localSupabaseReachable,
+} from './supabase-env'
 
 // Full v1 "definition of done" loop, end to end against a real backend:
 //   sign up → onboard (create household) → define a chore + reward →
 //   award stickers → board fills → redeem → chapter archives (board resets).
 //
-// This writes real rows, so it self-skips unless a LOCAL Supabase stack is
-// reachable (see e2e/README.md). Never point it at the hosted project.
-
-// Defaults to the standard local Supabase API port; override with
-// E2E_SUPABASE_URL when the stack runs on a non-default port.
-const LOCAL_SUPABASE_URL =
-  process.env.E2E_SUPABASE_URL ?? 'http://127.0.0.1:54321'
-
-async function localSupabaseUp(): Promise<boolean> {
-  try {
-    const res = await fetch(`${LOCAL_SUPABASE_URL}/auth/v1/health`)
-    return res.ok
-  } catch {
-    return false
-  }
-}
+// This writes real rows, so it self-skips unless the app under test is pointed
+// at a LOCAL Supabase stack (see e2e/README.md). The skip is gated on the dev
+// server's *configured* backend being loopback — not just "something answers on
+// :54321" — and blockNonLocalSupabase() is a hard net so a misconfigured env can
+// never write to the hosted project.
 
 test.describe('core loop: award → board → redeem', () => {
   test.beforeAll(async () => {
     test.skip(
-      !(await localSupabaseUp()),
+      !appTargetsLocalSupabase(),
+      'Dev server is not configured for a local Supabase (VITE_SUPABASE_URL is not loopback) — see e2e/README.md',
+    )
+    test.skip(
+      !(await localSupabaseReachable()),
       'Local Supabase not reachable on 127.0.0.1:54321 — see e2e/README.md',
     )
+  })
+
+  test.beforeEach(async ({ page }) => {
+    await blockNonLocalSupabase(page)
   })
 
   test('sign up, set up a chore + reward, award stickers, then redeem', async ({

@@ -49,8 +49,14 @@ Email confirmations are disabled in `supabase/config.toml`
 (`enable_confirmations = false`), so the test signs up a fresh unique user and
 gets a session immediately — no inbox step.
 
-If local Supabase isn't reachable on `127.0.0.1:54321`, the journey test skips
-with a message and only the smoke tests run.
+The data-writing specs decide to run based on the dev server's **configured**
+backend, not just "something answers on :54321". A spec self-skips unless
+`VITE_SUPABASE_URL` resolves to a loopback host (`127.0.0.1` / `localhost`) **and**
+that local stack is reachable. As a hard safety net, every write spec aborts any
+Supabase request to a non-loopback host — so a dev server still pointed at the
+hosted project can never write to it; the test fails loudly instead. This closes
+the trap where an unrelated local stack answers the health probe while the app is
+actually talking to production.
 
 ## Prerequisite for the account-deletion test
 
