@@ -70,6 +70,14 @@ describe('production CSP (vercel.json)', () => {
     expect(connect).toContain('wss://*.supabase.co')
   })
 
+  it('lets Sentry ship error events to its ingest endpoint (connect-src)', () => {
+    // Without the ingest origin here, the browser silently drops Sentry's
+    // POST and crashes never reach the dashboard (Item 2).
+    const connect = sources(csp, 'connect-src')
+    expect(connect).toContain('https://*.ingest.sentry.io')
+    expect(connect).toContain('https://*.ingest.us.sentry.io')
+  })
+
   it('lets the ORT wasm runtime load and instantiate (script-src)', () => {
     const script = sources(csp, 'script-src')
     expect(script).toContain('blob:') // dynamic import() of the blob .mjs loader

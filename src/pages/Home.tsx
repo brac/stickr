@@ -18,8 +18,8 @@ import {
   getQueuedAwards,
   removeQueuedAwards,
 } from '../lib/offlineQueue'
-import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
+import { registerScrubNames, reportError } from '../lib/monitoring'
 import type {
   Chore,
   Household,
@@ -29,6 +29,7 @@ import type {
   StickerImage,
 } from '../lib/types'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
+import { BoardLoadError } from '../components/BoardLoadError'
 import { BoardMenu } from '../components/BoardMenu'
 import { KidColumn, type KidColumnApi } from '../components/KidColumn'
 import { KidAvatar } from '../components/KidAvatar'
@@ -58,51 +59,107 @@ export function Home() {
   const [awardingId, setAwardingId] = useState<string | null>(null)
   const [showCustom, setShowCustom] = useState(false)
   const [needsOnboarding, setNeedsOnboarding] = useState(false)
+  const [loadError, setLoadError] = useState(false)
   // Each mounted kid column publishes its award/undo/reset/total here so the
   // shared chrome (chore grid, board menu) can drive the selected kid.
   const [apiByKid, setApiByKid] = useState<Map<string, KidColumnApi>>(
     () => new Map(),
   )
   const flushingRef = useRef(false)
+  // Monotonic run token: only the most recent load() applies its results. Covers
+  // both StrictMode's double-invoke and a retry that supersedes an in-flight load.
+  const loadRunRef = useRef(0)
 
-  useEffect(() => {
-    let active = true
-    ;(async () => {
+  const load = useCallback(async () => {
+    const runId = ++loadRunRef.current
+    const isCurrent = () => loadRunRef.current === runId
+    // No synchronous setState here: the first mount relies on the initial
+    // loading=true, and retry resets loading/error in its click handler. This
+    // keeps the effect that calls load() free of cascading-render setState.
+    try {
+      const myParent = await fetchMyParent()
+      if (!isCurrent()) return
+      if (!myParent) {
+        setNeedsOnboarding(true)
+        return
+      }
+      setParent(myParent)
+
+      // Critical: household + kids. There is no board without them, so a failure
+      // here is a real, retryable error state — not a blank screen.
+      let hh: Household | null
+      let theKids: Kid[]
       try {
-        const myParent = await fetchMyParent()
-        if (!active) return
-        if (!myParent) {
-          setNeedsOnboarding(true)
-          return
-        }
-        setParent(myParent)
-        const [hh, theKids, activeChores, tiers, images] = await Promise.all([
+        ;[hh, theKids] = await Promise.all([
           fetchHousehold(myParent.household_id),
           fetchKids(myParent.household_id),
-          fetchActiveChores(myParent.household_id),
-          fetchRewardTiers(myParent.household_id),
-          fetchStickerImages(myParent.household_id),
         ])
-        if (!active) return
-        setHousehold(hh)
-        setKids(theKids)
-        setSelectedKidId((prev) => prev ?? theKids[0]?.id ?? null)
-        if (hh?.board_layout === 'side_by_side' || hh?.board_layout === 'focused') {
-          setMode(hh.board_layout)
-        }
-        setChores(activeChores)
-        setRewardTiers(tiers)
-        setStickerImages(images)
       } catch (err) {
-        if (active) toast.error(getErrorMessage(err))
-      } finally {
-        if (active) setLoading(false)
+        if (!isCurrent()) return
+        reportError(err, { where: 'Home: critical board load' })
+        setLoadError(true)
+        return
       }
-    })()
-    return () => {
-      active = false
+      if (!isCurrent()) return
+      setHousehold(hh)
+      setKids(theKids)
+      // Feed kid/household names to the error-reporting PII scrubber now that
+      // they're known — they can surface in toast strings captured as Sentry
+      // breadcrumbs, and init ran before any of this data was available.
+      registerScrubNames([
+        ...(hh ? [hh.name] : []),
+        ...theKids.map((kid) => kid.name),
+      ])
+      setSelectedKidId((prev) => prev ?? theKids[0]?.id ?? null)
+      if (hh?.board_layout === 'side_by_side' || hh?.board_layout === 'focused') {
+        setMode(hh.board_layout)
+      }
+
+      // Secondary: chores / rewards / sticker images. A failure here degrades
+      // gracefully — the slice keeps its last value and the board still renders,
+      // rather than one stale-migration 400 blanking the whole screen.
+      const [choresR, tiersR, imagesR] = await Promise.allSettled([
+        fetchActiveChores(myParent.household_id),
+        fetchRewardTiers(myParent.household_id),
+        fetchStickerImages(myParent.household_id),
+      ])
+      if (!isCurrent()) return
+      if (choresR.status === 'fulfilled') setChores(choresR.value)
+      if (tiersR.status === 'fulfilled') setRewardTiers(tiersR.value)
+      if (imagesR.status === 'fulfilled') setStickerImages(imagesR.value)
+
+      const failures = [choresR, tiersR, imagesR].filter(
+        (r): r is PromiseRejectedResult => r.status === 'rejected',
+      )
+      if (failures.length > 0) {
+        for (const failure of failures) {
+          reportError(failure.reason, {
+            where: 'Home: secondary board load',
+          })
+        }
+        toast.error('Some of the board didn’t load. Reload to try again.')
+      }
+    } finally {
+      if (isCurrent()) setLoading(false)
     }
   }, [toast])
+
+  useEffect(() => {
+    void load()
+    // Invalidate any in-flight load when this effect tears down (StrictMode /
+    // unmount) so a late resolve can't write into an unmounted tree. Bumping the
+    // run token (a ref, intentionally) is the whole point of the cleanup.
+    return () => {
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      loadRunRef.current++
+    }
+  }, [load])
+
+  const handleRetry = useCallback(() => {
+    setLoadError(false)
+    setLoading(true)
+    void load()
+  }, [load])
 
   // Flush queued offline awards when connectivity returns (and on mount). Owned
   // once here — not per kid board — so multiple mounted boards don't race on the
@@ -116,8 +173,10 @@ export function Home() {
       await awardStickers(queued)
       removeQueuedAwards(new Set(queued.map((sticker) => sticker.id)))
       toast.success(`Synced ${pluralStickers(queued.length)}.`)
-    } catch {
-      // Still unreachable; leave queued for the next reconnect.
+    } catch (err) {
+      // Stays silent in the UI (the awards remain queued for the next
+      // reconnect), but report so we learn about persistent sync failures.
+      reportError(err, { where: 'Home: offline flushQueue' })
     } finally {
       flushingRef.current = false
     }
@@ -195,6 +254,9 @@ export function Home() {
   }
   if (needsOnboarding) {
     return <Navigate to="/onboarding" replace />
+  }
+  if (loadError) {
+    return <BoardLoadError onRetry={handleRetry} />
   }
 
   const selectedKid = kids.find((k) => k.id === selectedKidId) ?? null
