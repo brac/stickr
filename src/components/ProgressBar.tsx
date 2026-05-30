@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import type { RewardTier } from '../lib/types'
 
 interface ProgressBarProps {
@@ -59,6 +60,13 @@ export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
           </span>
         ) : tiers.length > 0 ? (
           <span className="text-ink-muted">All tiers reached</span>
+        ) : onClaimClick ? (
+          <Link
+            to="/setup/rewards"
+            className="font-medium text-accent-strong underline-offset-2 hover:underline"
+          >
+            Set a first reward
+          </Link>
         ) : null}
       </div>
 

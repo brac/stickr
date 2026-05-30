@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { SetupShell } from '../components/SetupShell'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
+import { EmptyState } from '../components/EmptyState'
 import { useMyParent } from '../hooks/useMyParent'
 import { fetchArchivedRewardTiers, fetchRewardTiers } from '../lib/queries'
 import {
@@ -211,13 +212,15 @@ export function RewardManager() {
             </button>
           </li>
         ))}
-        {tiers.length === 0 && (
-          <p className="mt-6 text-center text-sm text-ink-muted">
-            No rewards yet. Add a few thresholds to unlock the claim button on the
-            board.
-          </p>
-        )}
       </ul>
+      {tiers.length === 0 && (
+        <EmptyState
+          className="mt-6"
+          tone="plain"
+          title="No rewards yet"
+          body="Add a few thresholds to unlock the claim button on the board."
+        />
+      )}
 
       {archived.length > 0 && (
         <details className="mt-8 rounded-[var(--radius-card)] border border-black/10 bg-surface-raised/60">

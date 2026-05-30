@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { SetupShell } from '../components/SetupShell'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
+import { EmptyState } from '../components/EmptyState'
 import { useMyParent } from '../hooks/useMyParent'
 import {
   createChore,
@@ -177,12 +178,15 @@ export function ChoreManager() {
             </li>
           )
         })}
-        {chores.length === 0 && (
-          <p className="mt-6 text-center text-sm text-ink-muted">
-            No chores yet. Add your first one above.
-          </p>
-        )}
       </ul>
+      {chores.length === 0 && (
+        <EmptyState
+          className="mt-6"
+          tone="plain"
+          title="No chores yet"
+          body="Add your first chore using the form above to start awarding stickers."
+        />
+      )}
     </SetupShell>
   )
 }

@@ -10,6 +10,7 @@ import { fetchStickerImages, signStickerImageUrls } from '../lib/stickerImages'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { Kid, StickerEvent } from '../lib/types'
+import { EmptyState } from '../components/EmptyState'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { ChapterSnapshot } from '../components/ChapterSnapshot'
 import { SetupShell } from '../components/SetupShell'
@@ -209,12 +210,12 @@ export function History() {
           <span className="text-sm text-ink-muted">Loading…</span>
         </div>
       ) : chapters.length === 0 ? (
-        <div className="mt-12 text-center">
-          <p className="font-medium text-ink">No completed chapters yet</p>
-          <p className="mt-1 text-sm text-ink-muted">
-            Completed chapters appear here after the first reward is redeemed.
-          </p>
-        </div>
+        <EmptyState
+          className="mt-12"
+          tone="plain"
+          title="No completed chapters yet"
+          body="Completed chapters appear here after the first reward is redeemed."
+        />
       ) : (
         <ul className="flex flex-col gap-3">
           {chapters.map((chapter) => (

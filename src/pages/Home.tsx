@@ -30,6 +30,7 @@ import type {
 } from '../lib/types'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { BoardLoadError } from '../components/BoardLoadError'
+import { EmptyState } from '../components/EmptyState'
 import { BoardMenu } from '../components/BoardMenu'
 import { KidColumn, type KidColumnApi } from '../components/KidColumn'
 import { KidAvatar } from '../components/KidAvatar'
@@ -398,13 +399,12 @@ export function Home() {
       </section>
 
       {chores.length === 0 && (
-        <button
-          type="button"
-          onClick={() => navigate('/setup/chores')}
-          className="mt-3 rounded-[var(--radius-card)] border-2 border-dashed border-black/15 px-4 py-4 text-sm text-ink-muted transition-colors hover:border-accent/50 hover:text-ink"
-        >
-          No chores yet — tap to add one
-        </button>
+        <EmptyState
+          className="mt-3"
+          title="No chores yet"
+          body="Add your first chore to start awarding stickers."
+          action={{ label: 'Add a chore', href: '/setup/chores' }}
+        />
       )}
 
       {showCustom && (

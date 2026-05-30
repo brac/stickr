@@ -14,6 +14,7 @@ import { prefersWebcamCapture } from '../lib/webcam'
 import { WebcamCapture } from '../components/WebcamCapture'
 import { useToast } from '../components/toast/useToast'
 import type { StickerImage } from '../lib/types'
+import { EmptyState } from '../components/EmptyState'
 
 interface Preview {
   url: string
@@ -211,9 +212,13 @@ export function StickerLibrary() {
       </p>
 
       {images.length === 0 ? (
-        <p className="mt-10 text-center text-sm text-ink-muted">
-          No sticker images yet. Upload a few to use on your chores.
-        </p>
+        <EmptyState
+          className="mt-10"
+          tone="plain"
+          title="No sticker images yet"
+          body="Add a photo or upload one to use on your chores."
+          action={{ label: 'Take a photo', onClick: startPhotoCapture }}
+        />
       ) : (
         <ul className="mt-6 grid grid-cols-3 gap-3 sm:grid-cols-4">
           {images.map((image) => (

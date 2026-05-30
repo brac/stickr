@@ -9,6 +9,7 @@ import {
 import { pickStickerArt } from '../lib/stickerCatalog'
 import { jostle } from '../lib/juice'
 import type { StickerEvent } from '../lib/types'
+import { EmptyState } from './EmptyState'
 
 // Fallback colors only used if the sticker catalog ever becomes empty
 // (all files deleted from src/assets/stickers/).
@@ -107,9 +108,19 @@ export function StickerBoard({
         )
       })}
       {events.length === 0 && (
-        <p className="absolute inset-0 flex items-center justify-center px-6 text-center text-sm text-ink/70">
-          Tap a chore below to award the first sticker.
-        </p>
+        <div className="absolute inset-0 flex items-center justify-center px-6">
+          <EmptyState
+            tone="plain"
+            illustration={
+              <div
+                aria-hidden="true"
+                className="h-16 w-16 -rotate-6 rounded-2xl border-2 border-dashed border-ink/25"
+              />
+            }
+            title="The board is ready"
+            body="Tap a chore below to award the first sticker."
+          />
+        </div>
       )}
     </div>
   )
