@@ -17,11 +17,11 @@ interface KidAvatarProps {
 }
 
 // px dimensions per size, so the <img> has explicit width/height (no CLS).
-const SIZE_PX: Record<AvatarSize, number> = { sm: 24, md: 40, lg: 64 }
+const SIZE_PX: Record<AvatarSize, number> = { sm: 36, md: 56, lg: 96 }
 const EMOJI_CLASS: Record<AvatarSize, string> = {
-  sm: 'text-sm',
-  md: 'text-lg',
-  lg: 'text-3xl',
+  sm: 'text-xl',
+  md: 'text-3xl',
+  lg: 'text-5xl',
 }
 
 // Resolves a kid's avatar: uploaded cutout → chosen emoji → default emoji.
