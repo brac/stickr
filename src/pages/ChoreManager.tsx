@@ -146,8 +146,12 @@ export function ChoreManager() {
                 )}
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-ink">
-                  {chore.name}
+                <span
+                  className={`block truncate font-medium ${
+                    chore.name ? 'text-ink' : 'text-ink-muted italic'
+                  }`}
+                >
+                  {chore.name || 'Sticker only'}
                 </span>
                 <span className="text-sm text-ink-muted">
                   +{chore.sticker_value}
@@ -210,22 +214,30 @@ function ChoreForm({
   onSubmit,
   onCancel,
 }: ChoreFormProps) {
+  const hasName = form.name.trim().length > 0
+  const hasSticker = form.stickerImageId !== null
+  // A board button needs something tappable: a name or a sticker image. A null
+  // sticker shows the default star only in this manager, not on the board, so
+  // a name-less, image-less chore would render as a blank button.
+  const canSave = hasName || hasSticker
   return (
     <form
       onSubmit={onSubmit}
       className="rounded-[var(--radius-card)] border border-black/10 bg-surface-raised p-4"
     >
       <label className="block text-sm font-medium text-ink" htmlFor="chore-name">
-        Name
+        Name <span className="font-normal text-ink-muted">(optional)</span>
       </label>
       <input
         id="chore-name"
-        required
         value={form.name}
         onChange={(e) => onChange({ ...form, name: e.target.value })}
         placeholder="Brushed teeth"
         className="mt-1 w-full rounded-lg border border-black/10 bg-white px-3 py-2.5 text-ink outline-none focus:border-accent focus:ring-2 focus:ring-accent/30"
       />
+      <p className="mt-1 text-xs text-ink-muted">
+        Leave blank to show just the sticker on the board.
+      </p>
 
       <p className="mt-4 text-sm font-medium text-ink">Stickers per tap</p>
       <div className="mt-1 flex gap-2">
@@ -288,10 +300,16 @@ function ChoreForm({
         </div>
       )}
 
+      {!canSave && (
+        <p className="mt-4 text-sm text-amber-700">
+          Add a name or pick a sticker so the button has something to show.
+        </p>
+      )}
+
       <div className="mt-5 flex gap-2">
         <button
           type="submit"
-          disabled={saving}
+          disabled={saving || !canSave}
           className="flex-1 rounded-lg bg-accent px-4 py-2.5 font-medium text-white transition-colors hover:bg-accent-strong disabled:opacity-60"
         >
           {saving ? 'Saving…' : form.id === null ? 'Add chore' : 'Save changes'}

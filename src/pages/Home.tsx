@@ -7,7 +7,6 @@ import {
   fetchKids,
   fetchMyParent,
   fetchRewardTiers,
-  setBoardLayout,
   type BoardDisplayMode,
 } from '../lib/queries'
 import { fetchActiveChores } from '../lib/chores'
@@ -191,7 +190,11 @@ export function Home() {
 
   const choreNames = useMemo(() => {
     const map: Record<string, string> = {}
-    for (const chore of chores) map[chore.id] = chore.name
+    // Skip blank names so name-less chores fall back to the sticker label
+    // (e.g. in the Today log) instead of showing an empty string.
+    for (const chore of chores) {
+      if (chore.name) map[chore.id] = chore.name
+    }
     return map
   }, [chores])
 
@@ -239,17 +242,6 @@ export function Home() {
     [apiByKid, selectedKidId],
   )
 
-  const handleToggleMode = useCallback(() => {
-    setMode((prev) => {
-      const next: BoardDisplayMode =
-        prev === 'focused' ? 'side_by_side' : 'focused'
-      // Persist as a household preference; failure is non-fatal (local still wins
-      // for this session).
-      void setBoardLayout(next).catch(() => {})
-      return next
-    })
-  }, [])
-
   if (loading) {
     return <FullScreenSpinner />
   }
@@ -275,15 +267,23 @@ export function Home() {
         >
           {household?.name}
         </button>
-        <BoardMenu
-          undoDisabled={(selectedApi?.total ?? 0) === 0}
-          onKidView={() => navigate('/board')}
-          onSetup={() => navigate('/setup')}
-          onHistory={() => navigate('/history')}
-          onUndoLast={() => void selectedApi?.undoLast()}
-          onResetBoard={() => void selectedApi?.resetBoard()}
-          onSignOut={() => void signOut()}
-        />
+        <div className="flex items-center gap-1">
+          <button
+            type="button"
+            onClick={() => navigate('/board')}
+            className="rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-black/5 hover:text-ink"
+          >
+            Kid view
+          </button>
+          <BoardMenu
+            undoDisabled={(selectedApi?.total ?? 0) === 0}
+            onSetup={() => navigate('/setup')}
+            onHistory={() => navigate('/history')}
+            onUndoLast={() => void selectedApi?.undoLast()}
+            onResetBoard={() => void selectedApi?.resetBoard()}
+            onSignOut={() => void signOut()}
+          />
+        </div>
       </header>
 
       {!online && (
@@ -293,7 +293,7 @@ export function Home() {
       )}
 
       {multipleKids && (
-        <div className="mb-1 flex items-center justify-between gap-3">
+        <div className="mb-1 flex items-center gap-3">
           <div
             className="flex gap-1.5 overflow-x-auto rounded-lg bg-black/5 p-1"
             role="tablist"
@@ -320,13 +320,6 @@ export function Home() {
               )
             })}
           </div>
-          <button
-            type="button"
-            onClick={handleToggleMode}
-            className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors hover:bg-black/5"
-          >
-            {sideBySide ? 'Focus one' : 'Show both'}
-          </button>
         </div>
       )}
 
@@ -361,12 +354,18 @@ export function Home() {
           const choreImage = chore.sticker_image_id
             ? imageUrls[chore.sticker_image_id]
             : undefined
+          // Name-less chores render as a pure sticker button; fall back to the
+          // sticker label so the button keeps an accessible name.
+          const stickerLabel = chore.sticker_image_id
+            ? stickerImages.find((s) => s.id === chore.sticker_image_id)?.label
+            : undefined
           return (
             <button
               key={chore.id}
               type="button"
               disabled={awardingId !== null}
               onClick={() => void handleAward(chore)}
+              aria-label={chore.name ? undefined : (stickerLabel ?? 'Award sticker')}
               className="flex flex-col items-center gap-2 rounded-[var(--radius-card)] bg-accent px-4 py-5 font-medium text-white shadow-sm transition-[transform,filter] duration-100 ease-out active:scale-[0.94] active:brightness-90 disabled:opacity-60"
             >
               {choreImage && (
@@ -379,7 +378,7 @@ export function Home() {
                   />
                 </span>
               )}
-              <span className="text-base">{chore.name}</span>
+              {chore.name && <span className="text-base">{chore.name}</span>}
               <span className="text-sm text-white/80">+{chore.sticker_value}</span>
             </button>
           )
