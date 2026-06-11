@@ -27,6 +27,8 @@ export function KidBoard() {
   const [rewardTiers, setRewardTiers] = useState<RewardTier[]>([])
   const [stickerImages, setStickerImages] = useState<StickerImage[]>([])
   const [isFullscreen, setIsFullscreen] = useState(false)
+  // Kid view shows one board at a time; default (null) resolves to the first kid.
+  const [selectedKidId, setSelectedKidId] = useState<string | null>(null)
 
   useEffect(() => {
     let active = true
@@ -89,6 +91,9 @@ export function KidBoard() {
   }
 
   const multipleKids = kids.length > 1
+  // Resolve the shown kid: the tapped one, else the first. Falls back cleanly if
+  // a selected kid is removed.
+  const selectedKid = kids.find((k) => k.id === selectedKidId) ?? kids[0] ?? null
 
   return (
     <main className="relative min-h-full px-4 py-6 sm:px-8">
@@ -141,23 +146,49 @@ export function KidBoard() {
           No kids yet. Add one in setup to see their board here.
         </p>
       ) : (
-        <div
-          className={
-            multipleKids
-              ? 'mx-auto flex max-w-7xl gap-8 overflow-x-auto pt-8'
-              : 'mx-auto max-w-3xl pt-8'
-          }
-        >
-          {kids.map((kid) => (
-            <KidViewColumn
-              key={kid.id}
-              kid={kid}
-              parent={parent}
-              rewardTiers={rewardTiers}
-              imageUrls={imageUrls}
-            />
-          ))}
-        </div>
+        <>
+          {multipleKids && (
+            <div className="flex justify-center pt-1">
+              <div
+                role="tablist"
+                aria-label="Choose kid"
+                className="flex gap-1 rounded-full bg-black/5 p-1"
+              >
+                {kids.map((kid) => {
+                  const isSelected = kid.id === selectedKid?.id
+                  return (
+                    <button
+                      key={kid.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={isSelected}
+                      onClick={() => setSelectedKidId(kid.id)}
+                      className={`rounded-full px-5 py-2 text-base font-semibold transition-colors ${
+                        isSelected
+                          ? 'bg-surface-raised text-ink shadow-sm'
+                          : 'text-ink-muted'
+                      }`}
+                    >
+                      {kid.name}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {selectedKid && (
+            <div className="mx-auto max-w-3xl pt-6">
+              <KidViewColumn
+                key={selectedKid.id}
+                kid={selectedKid}
+                parent={parent}
+                rewardTiers={rewardTiers}
+                imageUrls={imageUrls}
+              />
+            </div>
+          )}
+        </>
       )}
     </main>
   )
