@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 import { processStickerImage } from './imageProcessing'
 import { getErrorMessage } from './errors'
+import { reportError } from './monitoring'
 import type { Kid } from './types'
 
 const BUCKET = 'kid-avatars'
@@ -54,14 +55,28 @@ export async function uploadKidAvatar(args: {
     p_path: path,
   })
   if (error) {
-    // Don't orphan the just-uploaded object if the row update fails.
-    await supabase.storage.from(BUCKET).remove([path])
+    // Don't orphan the just-uploaded object if the row update fails. Storage
+    // .remove() reports failure via its error field, not by throwing.
+    const { error: removeError } = await supabase.storage
+      .from(BUCKET)
+      .remove([path])
+    if (removeError) {
+      reportError(removeError, { where: 'uploadKidAvatar: cleanup', path })
+    }
     throw new Error(getErrorMessage(error))
   }
 
   if (oldPath && oldPath !== path) {
     // Best-effort cleanup of the previous photo.
-    await supabase.storage.from(BUCKET).remove([oldPath])
+    const { error: removeError } = await supabase.storage
+      .from(BUCKET)
+      .remove([oldPath])
+    if (removeError) {
+      reportError(removeError, {
+        where: 'uploadKidAvatar: old avatar cleanup',
+        path: oldPath,
+      })
+    }
   }
   return path
 }
@@ -75,7 +90,17 @@ export async function removeKidAvatar(kid: Kid): Promise<void> {
     throw new Error(getErrorMessage(error))
   }
   if (kid.avatar_path) {
-    await supabase.storage.from(BUCKET).remove([kid.avatar_path])
+    const { error: removeError } = await supabase.storage
+      .from(BUCKET)
+      .remove([kid.avatar_path])
+    if (removeError) {
+      // The kid row no longer points at it; an orphaned object is invisible
+      // and gets purged with the household — report, don't fail the removal.
+      reportError(removeError, {
+        where: 'removeKidAvatar: storage remove',
+        path: kid.avatar_path,
+      })
+    }
   }
 }
 

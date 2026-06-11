@@ -18,6 +18,7 @@ import {
   removeQueuedAwards,
 } from '../lib/offlineQueue'
 import { useToast } from '../components/toast/useToast'
+import { getPostgresErrorCode } from '../lib/errors'
 import { registerScrubNames, reportError } from '../lib/monitoring'
 import type {
   Chore,
@@ -163,19 +164,51 @@ export function Home() {
   // Flush queued offline awards when connectivity returns (and on mount). Owned
   // once here — not per kid board — so multiple mounted boards don't race on the
   // shared queue. Inserted stickers arrive at each board via realtime.
+  //
+  // Per-sticker, not one batch insert: a multi-row insert is atomic, so one
+  // permanently-unflushable sticker (its chapter was redeemed while offline)
+  // would block every other queued award forever. Queue sizes are tiny.
   const flushQueue = useCallback(async () => {
     if (flushingRef.current) return
     const queued = getQueuedAwards()
     if (queued.length === 0) return
     flushingRef.current = true
     try {
-      await awardStickers(queued)
-      removeQueuedAwards(new Set(queued.map((sticker) => sticker.id)))
-      toast.success(`Synced ${pluralStickers(queued.length)}.`)
-    } catch (err) {
-      // Stays silent in the UI (the awards remain queued for the next
-      // reconnect), but report so we learn about persistent sync failures.
-      reportError(err, { where: 'Home: offline flushQueue' })
+      let synced = 0
+      let dropped = 0
+      for (const sticker of queued) {
+        try {
+          await awardStickers([sticker])
+          removeQueuedAwards(new Set([sticker.id]))
+          synced++
+        } catch (err) {
+          const code = getPostgresErrorCode(err)
+          if (code === '23505') {
+            // Already inserted by a previous flush that died before clearing
+            // the queue — that's a success, not a failure.
+            removeQueuedAwards(new Set([sticker.id]))
+            synced++
+          } else if (code === '42501' || code === 'P0001') {
+            // The chapter was closed (redeemed) while this award sat in the
+            // queue (42501 = RLS reject, P0001 = trigger 'chapter closed').
+            // It can never sync — drop it and tell the parent below.
+            removeQueuedAwards(new Set([sticker.id]))
+            dropped++
+            reportError(err, { where: 'Home flushQueue: unflushable award' })
+          } else {
+            // Transient (still offline / server hiccup): keep this and the
+            // rest queued for the next reconnect.
+            reportError(err, { where: 'Home: offline flushQueue' })
+            break
+          }
+        }
+      }
+      if (synced > 0) toast.success(`Synced ${pluralStickers(synced)}.`)
+      if (dropped > 0) {
+        toast.error(
+          `${pluralStickers(dropped)} couldn’t sync — the board was redeemed before they arrived. Award them again if they still count.`,
+        )
+      }
     } finally {
       flushingRef.current = false
     }
@@ -210,7 +243,9 @@ export function Home() {
   const handleAward = useCallback(
     async (chore: Chore) => {
       const api = selectedKidId ? apiByKid.get(selectedKidId) : undefined
-      if (!api) return
+      // The state guard backs up the buttons' disabled attribute: a second tap
+      // queued between render frames must not start a concurrent award.
+      if (!api || awardingId !== null) return
       setAwardingId(chore.id)
       try {
         await api.award({
@@ -223,22 +258,27 @@ export function Home() {
         setAwardingId(null)
       }
     },
-    [apiByKid, selectedKidId],
+    [apiByKid, selectedKidId, awardingId],
   )
 
   const handleCustomAward = useCallback(
     async (input: CustomAwardInput) => {
       const api = selectedKidId ? apiByKid.get(selectedKidId) : undefined
-      if (!api) return
-      await api.award({
-        choreId: null,
-        stickerImageId: input.stickerImageId,
-        label: input.label,
-        count: input.value,
-      })
-      setShowCustom(false)
+      if (!api || awardingId !== null) return
+      setAwardingId('custom')
+      try {
+        await api.award({
+          choreId: null,
+          stickerImageId: input.stickerImageId,
+          label: input.label,
+          count: input.value,
+        })
+        setShowCustom(false)
+      } finally {
+        setAwardingId(null)
+      }
     },
-    [apiByKid, selectedKidId],
+    [apiByKid, selectedKidId, awardingId],
   )
 
   if (loading) {

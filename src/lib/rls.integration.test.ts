@@ -408,4 +408,83 @@ describe.skipIf(!RUN)('cross-household RLS isolation', () => {
       globalThis.Event = jsdomEvent
     }
   }, 20_000)
+
+  // --- Within-household integrity (20260610120000_sticker_event_integrity) --
+  //
+  // Not isolation: these guard the closed-chapter invariants inside a single
+  // household. They FAIL until that migration is applied — intentional, same
+  // as the Finding-1 regression guard above. Defined last because the first
+  // one redeems (closes) A's seeded chapter, which earlier tests insert into.
+
+  it('A cannot insert a sticker_event into a CLOSED chapter', async () => {
+    const { data: aParent } = await A.client.from('parent').select('id').single()
+    // Meet the tier threshold (1), then redeem — closing A.chapterId.
+    const { error: insErr } = await A.client.from('sticker_event').insert({
+      kid_id: A.kidId,
+      chapter_id: A.chapterId,
+      chore_id: A.choreId,
+      amount: 1,
+      awarded_by: aParent!.id,
+    })
+    expect(insErr).toBeNull()
+    const { data: newChapterId, error: redeemErr } = await A.client.rpc('redeem_chapter', {
+      p_kid_id: A.kidId,
+      p_chapter_id: A.chapterId,
+      p_reward_tier_id: A.tierId,
+      p_redeemed_by: aParent!.id,
+    })
+    expect(redeemErr).toBeNull()
+    expect(newChapterId).toBeTruthy()
+
+    // The archived chapter must be immutable: RLS rejects the insert (42501).
+    const { error } = await A.client.from('sticker_event').insert({
+      kid_id: A.kidId,
+      chapter_id: A.chapterId,
+      chore_id: A.choreId,
+      amount: 1,
+      awarded_by: aParent!.id,
+    })
+    expect(error).not.toBeNull()
+    expect(error!.code).toBe('42501')
+  })
+
+  it('redeem_chapter rejects a chapter belonging to a different kid', async () => {
+    const { data: aParent } = await A.client.from('parent').select('id').single()
+    // Second kid in A's OWN household, with its own open chapter — this is a
+    // domain-integrity check, not cross-tenant.
+    const { data: kid2Id, error: kidErr } = await A.client.rpc('create_kid', {
+      p_kid_name: 'Kid A2',
+    })
+    expect(kidErr).toBeNull()
+    const { data: kid2 } = await A.client
+      .from('kid')
+      .select('current_chapter_id')
+      .eq('id', kid2Id as string)
+      .single()
+    // Earn past the threshold on kid2 so only the chapter-ownership check can
+    // be what rejects the redeem below.
+    const { error: insErr } = await A.client.from('sticker_event').insert({
+      kid_id: kid2Id as string,
+      chapter_id: kid2!.current_chapter_id as string,
+      chore_id: A.choreId,
+      amount: 1,
+      awarded_by: aParent!.id,
+    })
+    expect(insErr).toBeNull()
+
+    // Redeem kid2 against kid1's open chapter → ownership validation rejects.
+    const { data: kid1 } = await A.client
+      .from('kid')
+      .select('current_chapter_id')
+      .eq('id', A.kidId)
+      .single()
+    const { error } = await A.client.rpc('redeem_chapter', {
+      p_kid_id: kid2Id as string,
+      p_chapter_id: kid1!.current_chapter_id as string,
+      p_reward_tier_id: A.tierId,
+      p_redeemed_by: aParent!.id,
+    })
+    expect(error).not.toBeNull()
+    expect(error!.message).toMatch(/chapter already closed/)
+  })
 })

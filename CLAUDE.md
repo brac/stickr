@@ -115,7 +115,7 @@ Stickers fill the board in rows, top-to-bottom, with deterministic jitter:
 3. Apply seeded jitter using the sticker_event's id as the random seed:
    - x offset: ±8px
    - y offset: ±6px
-   - rotation: ±15°
+   - rotation: ±28°
 4. Store the final position on the sticker_event row so renders are stable.
 
 Why deterministic: the same event must always render in the same place across

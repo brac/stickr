@@ -60,6 +60,11 @@ export function KidColumn({
         <KidAvatar kid={board.kid} size="sm" />
         {board.kid.name}'s board
       </p>
+      {!board.live && (
+        <p className="mt-2 rounded-lg bg-amber-100 px-3 py-1.5 text-center text-xs text-amber-800">
+          Live updates paused — reconnecting…
+        </p>
+      )}
       <div ref={boardRef} className="mt-3 w-full">
         <StickerBoard
           events={board.events}

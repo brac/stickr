@@ -12,6 +12,7 @@ vi.mock('./supabase', () => ({
 vi.mock('./imageProcessing', () => ({
   processStickerImage: vi.fn(async () => new Blob(['x'], { type: 'image/webp' })),
 }))
+vi.mock('./monitoring', () => ({ reportError: vi.fn() }))
 
 import {
   signKidAvatarUrl,
@@ -19,6 +20,7 @@ import {
   removeKidAvatar,
   setKidAvatarEmoji,
 } from './kidAvatars'
+import { reportError } from './monitoring'
 import type { Kid } from './types'
 
 const upload = vi.fn()
@@ -51,6 +53,7 @@ beforeEach(() => {
   remove.mockReset().mockResolvedValue({ error: null })
   createSignedUrl.mockReset()
   storageFromMock.mockReset().mockReturnValue({ upload, remove, createSignedUrl })
+  vi.mocked(reportError).mockClear()
 })
 
 describe('signKidAvatarUrl', () => {
@@ -127,6 +130,19 @@ describe('removeKidAvatar', () => {
   it('skips storage removal when there was no photo', async () => {
     await removeKidAvatar(kid({ avatar_path: null }))
     expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('still resolves when the storage removal fails, but reports it', async () => {
+    // Storage .remove() reports failure via the error field, never by throwing.
+    remove.mockResolvedValue({ error: new Error('object locked') })
+
+    await expect(
+      removeKidAvatar(kid({ avatar_path: 'hh-1/kid-1/a.webp' })),
+    ).resolves.toBeUndefined()
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error), {
+      where: 'removeKidAvatar: storage remove',
+      path: 'hh-1/kid-1/a.webp',
+    })
   })
 })
 

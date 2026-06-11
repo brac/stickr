@@ -4,6 +4,7 @@ import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { useMyParent } from '../hooks/useMyParent'
 import { createKid, fetchKids } from '../lib/queries'
 import { getErrorMessage } from '../lib/errors'
+import { reportError } from '../lib/monitoring'
 import { useToast } from '../components/toast/useToast'
 import { KidAvatar } from '../components/KidAvatar'
 import { KidAvatarEditor } from '../components/KidAvatarEditor'
@@ -40,9 +41,17 @@ export function KidManager() {
     }
   }, [householdId, toast])
 
+  // Handles its own failure: callers run this AFTER a successful save, so a
+  // reload hiccup must not surface as a failed save (which invites a duplicate
+  // retry) — the save's success toast has already fired by the time this runs.
   async function reload() {
     if (!householdId) return
-    setKids(await fetchKids(householdId))
+    try {
+      setKids(await fetchKids(householdId))
+    } catch (err) {
+      reportError(err, { where: 'KidManager: reload' })
+      toast.error('Saved, but the list didn’t refresh — reopen this page to see it.')
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -52,10 +61,10 @@ export function KidManager() {
     setSaving(true)
     try {
       await createKid(trimmed)
-      await reload()
       setName('')
       setAdding(false)
       toast.success('Kid added.')
+      await reload()
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {

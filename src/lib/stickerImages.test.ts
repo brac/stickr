@@ -11,6 +11,7 @@ vi.mock('./supabase', () => ({
 vi.mock('./imageProcessing', () => ({
   processStickerImage: vi.fn(async () => new Blob(['x'], { type: 'image/webp' })),
 }))
+vi.mock('./monitoring', () => ({ reportError: vi.fn() }))
 
 import {
   signStickerImageUrls,
@@ -19,6 +20,7 @@ import {
   deleteStickerImage,
 } from './stickerImages'
 import { processStickerImage } from './imageProcessing'
+import { reportError } from './monitoring'
 import type { StickerImage } from './types'
 
 const upload = vi.fn()
@@ -35,6 +37,7 @@ beforeEach(() => {
   remove.mockReset().mockResolvedValue({ error: null })
   createSignedUrls.mockReset()
   storageFromMock.mockReset().mockReturnValue({ upload, remove, createSignedUrls })
+  vi.mocked(reportError).mockClear()
 })
 
 describe('signStickerImageUrls', () => {
@@ -199,5 +202,17 @@ describe('deleteStickerImage', () => {
 
     await expect(deleteStickerImage(image)).rejects.toBe(error)
     expect(remove).not.toHaveBeenCalled()
+  })
+
+  it('still resolves when the storage removal fails, but reports it', async () => {
+    fromMock.mockReturnValue(queryResult({ error: null }))
+    // Storage .remove() reports failure via the error field, never by throwing.
+    remove.mockResolvedValue({ error: new Error('object locked') })
+
+    await expect(deleteStickerImage(image)).resolves.toBeUndefined()
+    expect(reportError).toHaveBeenCalledWith(expect.any(Error), {
+      where: 'deleteStickerImage: storage remove',
+      path: 'hh-1/x.webp',
+    })
   })
 })

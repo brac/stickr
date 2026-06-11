@@ -126,11 +126,18 @@ export function StickerLibrary() {
     if (file) void processPhoto(file)
   }
 
+  // Revoke each preview's object URL when it's replaced or the page unmounts
+  // (navigating away mid-preview would otherwise leak the blob for the whole
+  // PWA session — installed apps rarely do a real page load).
+  useEffect(() => {
+    const url = preview?.url
+    return () => {
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [preview])
+
   function closePreview() {
-    setPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev.url)
-      return null
-    })
+    setPreview(null)
   }
 
   async function handleUseSticker() {

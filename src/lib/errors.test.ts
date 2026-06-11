@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { getErrorMessage } from './errors'
+import { getErrorMessage, getPostgresErrorCode } from './errors'
 
 describe('getErrorMessage', () => {
   it('returns the message of an Error instance', () => {
@@ -26,5 +26,20 @@ describe('getErrorMessage', () => {
     expect(getErrorMessage(undefined)).toBe(
       'Something went wrong. Please try again.',
     )
+  })
+})
+
+describe('getPostgresErrorCode', () => {
+  it('reads the code off a Supabase/PostgREST error shape', () => {
+    expect(getPostgresErrorCode({ message: 'dup', code: '23505' })).toBe('23505')
+    expect(getPostgresErrorCode({ code: 'P0001' })).toBe('P0001')
+  })
+
+  it('returns undefined when code is missing or not a string', () => {
+    expect(getPostgresErrorCode({ message: 'no code' })).toBeUndefined()
+    expect(getPostgresErrorCode({ code: 23505 })).toBeUndefined()
+    expect(getPostgresErrorCode(new Error('boom'))).toBeUndefined()
+    expect(getPostgresErrorCode(null)).toBeUndefined()
+    expect(getPostgresErrorCode('nope')).toBeUndefined()
   })
 })

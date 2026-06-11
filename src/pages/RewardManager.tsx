@@ -11,6 +11,7 @@ import {
   updateRewardTier,
 } from '../lib/rewards'
 import { getErrorMessage } from '../lib/errors'
+import { reportError } from '../lib/monitoring'
 import { useToast } from '../components/toast/useToast'
 import type { RewardTier } from '../lib/types'
 
@@ -50,14 +51,22 @@ export function RewardManager() {
     }
   }, [householdId, toast])
 
+  // Handles its own failure: callers run this AFTER a successful save, so a
+  // reload hiccup must not surface as a failed save (which invites a duplicate
+  // retry) — the save's success toast has already fired by the time this runs.
   async function reload() {
     if (!householdId) return
-    const [live, gone] = await Promise.all([
-      fetchRewardTiers(householdId),
-      fetchArchivedRewardTiers(householdId),
-    ])
-    setTiers(live)
-    setArchived(gone)
+    try {
+      const [live, gone] = await Promise.all([
+        fetchRewardTiers(householdId),
+        fetchArchivedRewardTiers(householdId),
+      ])
+      setTiers(live)
+      setArchived(gone)
+    } catch (err) {
+      reportError(err, { where: 'RewardManager: reload' })
+      toast.error('Saved, but the list didn’t refresh — reopen this page to see it.')
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -77,9 +86,9 @@ export function RewardManager() {
       } else {
         await updateRewardTier(form.id as string, input)
       }
-      await reload()
       setForm(null)
       toast.success(isNew ? 'Reward added.' : 'Reward updated.')
+      await reload()
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -91,12 +100,12 @@ export function RewardManager() {
     if (!window.confirm(`Remove the "${tier.name}" reward?`)) return
     try {
       const result = await removeRewardTier(tier.id)
-      await reload()
       toast.success(
         result === 'deleted'
           ? 'Reward deleted.'
           : 'Reward archived — kept for reward history.',
       )
+      await reload()
     } catch (err) {
       toast.error(getErrorMessage(err))
     }
@@ -105,8 +114,8 @@ export function RewardManager() {
   async function handleRestore(tier: RewardTier) {
     try {
       await setRewardTierActive(tier.id, true)
-      await reload()
       toast.success('Reward restored.')
+      await reload()
     } catch (err) {
       toast.error(getErrorMessage(err))
     }

@@ -13,6 +13,7 @@ import {
 import { fetchStickerImages } from '../lib/stickerImages'
 import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { getErrorMessage } from '../lib/errors'
+import { reportError } from '../lib/monitoring'
 import { useToast } from '../components/toast/useToast'
 import type { Chore, StickerImage } from '../lib/types'
 
@@ -54,9 +55,17 @@ export function ChoreManager() {
 
   const imageUrls = useStickerImageUrls(images)
 
+  // Handles its own failure: callers run this AFTER a successful save, so a
+  // reload hiccup must not surface as a failed save (which invites a duplicate
+  // retry) — the save's success toast has already fired by the time this runs.
   async function reloadChores() {
     if (!householdId) return
-    setChores(await fetchAllChores(householdId))
+    try {
+      setChores(await fetchAllChores(householdId))
+    } catch (err) {
+      reportError(err, { where: 'ChoreManager: reload' })
+      toast.error('Saved, but the list didn’t refresh — reopen this page to see it.')
+    }
   }
 
   async function handleSubmit(event: FormEvent) {
@@ -78,9 +87,9 @@ export function ChoreManager() {
       } else {
         await updateChore(form.id as string, input)
       }
-      await reloadChores()
       setForm(null)
       toast.success(isNew ? 'Chore added.' : 'Chore updated.')
+      await reloadChores()
     } catch (err) {
       toast.error(getErrorMessage(err))
     } finally {
@@ -91,8 +100,8 @@ export function ChoreManager() {
   async function handleToggleActive(chore: Chore) {
     try {
       await setChoreActive(chore.id, !chore.active)
-      await reloadChores()
       toast.success(chore.active ? 'Chore deactivated.' : 'Chore activated.')
+      await reloadChores()
     } catch (err) {
       toast.error(getErrorMessage(err))
     }

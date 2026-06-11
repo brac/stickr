@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { signStickerImageUrls } from '../lib/stickerImages'
+import { reportError } from '../lib/monitoring'
 import type { StickerImage } from '../lib/types'
 
 // Resolves display URLs for sticker images. The bucket is private, so this mints
@@ -23,9 +24,11 @@ export function useStickerImageUrls(
       .then((map) => {
         if (active) setUrls(map)
       })
-      .catch(() => {
+      .catch((err) => {
         // Signing failed (offline, expired session) — fall back to no art rather
-        // than surfacing an error for a non-critical visual.
+        // than surfacing an error for a non-critical visual, but report it: a
+        // persistent failure here blanks every sticker on the board.
+        reportError(err, { where: 'useStickerImageUrls: sign' })
         if (active) setUrls({})
       })
     return () => {

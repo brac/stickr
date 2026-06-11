@@ -8,14 +8,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session)
-      setLoading(false)
-    })
+    // Single listener, no separate getSession(): supabase-js v2 fires
+    // INITIAL_SESSION immediately on subscribe (null session if restore
+    // fails), so loading always resolves — and a SIGNED_OUT arriving during
+    // startup can't be overwritten by a stale getSession() resolution.
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
       setSession(nextSession)
+      setLoading(false)
     })
     return () => subscription.unsubscribe()
   }, [])

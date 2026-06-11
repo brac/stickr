@@ -53,6 +53,20 @@ export async function fetchKid(householdId: string): Promise<Kid | null> {
   return kids[0] ?? null
 }
 
+// Refetch one kid row — used to heal a redemption (current_chapter_id change)
+// missed while a realtime channel was disconnected.
+export async function fetchKidById(kidId: string): Promise<Kid | null> {
+  const { data, error } = await supabase
+    .from('kid')
+    .select('*')
+    .eq('id', kidId)
+    .maybeSingle()
+  if (error) {
+    throw error
+  }
+  return data
+}
+
 // Kid rows are read-only from the client; creation goes through an RPC that also
 // seeds the kid's first board_chapter. Returns the new kid id.
 export async function createKid(name: string): Promise<string> {

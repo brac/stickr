@@ -8,6 +8,11 @@
 //   - sole parent  -> tear down the whole household (cascades) + storage + auth user
 //   - co-parent    -> remove only this parent row + auth user; household survives
 //
+// The sole-vs-co-parent decision is made atomically by the
+// delete_own_account_scope() RPC (household row lock), so two co-parents
+// deleting simultaneously can't both take the co-parent path and orphan the
+// household — see 20260610120001_delete_account_scope_rpc.sql.
+//
 // The auth-user deletion happens LAST so a failed DB/storage step leaves the
 // account intact and safe to retry rather than orphaned in auth.users.
 //
@@ -27,8 +32,13 @@ const ANON_KEY = Deno.env.get('SUPABASE_ANON_KEY') ?? ''
 // public flag alike).
 const HOUSEHOLD_BUCKETS = ['sticker-images', 'kid-avatars'] as const
 
+// Pin CORS to the app origin in production: this is a destructive endpoint.
+// Set via `supabase secrets set APP_ORIGIN=https://…`; the '*' fallback keeps
+// deletion working (JWT still required) until the secret is configured.
+const APP_ORIGIN = Deno.env.get('APP_ORIGIN') ?? '*'
+
 const CORS_HEADERS = {
-  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Origin': APP_ORIGIN,
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 }
@@ -129,15 +139,17 @@ Deno.serve(async (req) => {
       return json({ outcome: 'self_removed' })
     }
 
-    const { count, error: countError } = await admin
-      .from('parent')
-      .select('id', { count: 'exact', head: true })
-      .eq('household_id', parentRow.household_id)
-    if (countError) throw new Error(countError.message)
+    // Atomic decision via the CALLER's client (auth.uid() must resolve): the
+    // RPC locks the household row, so two simultaneous deletions serialize —
+    // the second recounts after the first commits and correctly becomes the
+    // last-parent-out case instead of orphaning the household.
+    // 'self' also means the RPC already deleted the caller's parent row.
+    const { data: scope, error: scopeError } = await caller.rpc(
+      'delete_own_account_scope',
+    )
+    if (scopeError) throw new Error(scopeError.message)
 
-    const soleParent = (count ?? 1) <= 1
-
-    if (soleParent) {
+    if (scope === 'household') {
       // Last parent out: storage first (safe to re-run), then the household row
       // (cascades to kids, chapters, events, redemptions, chores, tiers,
       // sticker images, push subscriptions), then the auth user.
@@ -153,14 +165,8 @@ Deno.serve(async (req) => {
       return json({ outcome: 'household_deleted' })
     }
 
-    // Co-parent: drop only this parent row (FK ON DELETE SET NULL keeps the
-    // history; push_subscription cascades), then the auth user.
-    const { error: deleteError } = await admin
-      .from('parent')
-      .delete()
-      .eq('id', parentRow.id)
-    if (deleteError) throw new Error(deleteError.message)
-
+    // Co-parent: the RPC dropped this parent row (FK ON DELETE SET NULL keeps
+    // the history; push_subscription cascades) — finish with the auth user.
     const { error: authError } = await admin.auth.admin.deleteUser(user.id)
     if (authError) throw new Error(authError.message)
     return json({ outcome: 'self_removed' })

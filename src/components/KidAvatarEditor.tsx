@@ -1,4 +1,4 @@
-import { useRef, useState, type ChangeEvent } from 'react'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { makeStickerCutout, type StickerTreatment } from '../lib/imageProcessing'
 import {
   removeKidAvatar,
@@ -76,11 +76,18 @@ export function KidAvatarEditor({ kid, onClose, onUpdated }: KidAvatarEditorProp
     }
   }
 
+  // Revoke each preview's object URL when it's replaced or the editor unmounts
+  // (closing the modal via the backdrop with a preview open would otherwise
+  // leak the blob for the whole PWA session).
+  useEffect(() => {
+    const url = preview?.url
+    return () => {
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [preview])
+
   function closePreview() {
-    setPreview((prev) => {
-      if (prev) URL.revokeObjectURL(prev.url)
-      return null
-    })
+    setPreview(null)
   }
 
   async function confirmPhoto() {
