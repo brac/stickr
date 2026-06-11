@@ -76,7 +76,7 @@ export function ProgressBar({ total, tiers, onClaimClick }: ProgressBarProps) {
           onClick={onClaimClick}
           className="mt-3 w-full rounded-xl bg-accent py-3 font-semibold text-white shadow-sm transition-opacity active:opacity-80"
         >
-          🎉 {unlockedCount === 1 ? '1 reward ready' : `${unlockedCount} rewards ready`} — Claim
+          🎉 Claim a reward
         </button>
       )}
     </div>
