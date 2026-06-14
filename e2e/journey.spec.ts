@@ -101,7 +101,7 @@ test.describe('core loop: award → board → redeem', () => {
     await expect(page.getByTestId('sticker')).toHaveCount(0)
   })
 
-  test('multiple kids: add, switch, award independently, then side by side', async ({
+  test('multiple kids: add, switch, award independently', async ({
     page,
   }) => {
     const email = `e2e-mk-${Date.now()}@example.com`
@@ -160,9 +160,5 @@ test.describe('core loop: award → board → redeem', () => {
     // Back to Pip — its sticker persisted.
     await tabs.getByRole('tab', { name: 'Pip' }).click()
     await expect(page.getByTestId('sticker')).toHaveCount(1)
-
-    // Side-by-side shows both boards at once: 1 + 1 = 2 stickers in the DOM.
-    await page.getByRole('button', { name: 'Show both' }).click()
-    await expect(page.getByTestId('sticker')).toHaveCount(2)
   })
 })

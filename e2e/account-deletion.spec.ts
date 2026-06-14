@@ -49,9 +49,19 @@ async function createHousehold(
   page: Page,
   opts: { household: string; kid: string; parent: string },
 ): Promise<void> {
+  // Onboarding is a multi-step wizard (kept in sync with journey.spec.ts):
+  // household + you → kid + age band → chores → reward.
+  // Step 1 — household + you.
   await page.locator('#household').fill(opts.household)
-  await page.locator('#kid').fill(opts.kid)
   await page.locator('#parent').fill(opts.parent)
+  await page.getByRole('button', { name: 'Next' }).click()
+  // Step 2 — kid + age band.
+  await page.locator('#kid').fill(opts.kid)
+  await page.getByRole('button', { name: '2–3', exact: true }).click()
+  await page.getByRole('button', { name: 'Next' }).click()
+  // Step 3 — chores preselected for the band; accept the defaults.
+  await page.getByRole('button', { name: 'Next' }).click()
+  // Step 4 — reward (prefilled); submit.
   await page.getByRole('button', { name: 'Create household' }).click()
   await page.waitForURL((url) => url.pathname === '/')
 }
