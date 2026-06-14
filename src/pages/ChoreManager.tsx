@@ -10,7 +10,7 @@ import {
   setChoreActive,
   updateChore,
 } from '../lib/chores'
-import { fetchStickerImages } from '../lib/stickerImages'
+import { loadStickerImages } from '../lib/stickerImageCache'
 import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { getErrorMessage } from '../lib/errors'
 import { reportError } from '../lib/monitoring'
@@ -39,7 +39,7 @@ export function ChoreManager() {
   useEffect(() => {
     if (!householdId) return
     let active = true
-    Promise.all([fetchAllChores(householdId), fetchStickerImages(householdId)])
+    Promise.all([fetchAllChores(householdId), loadStickerImages(householdId)])
       .then(([choreRows, imageRows]) => {
         if (!active) return
         setChores(choreRows)
@@ -53,7 +53,7 @@ export function ChoreManager() {
     }
   }, [householdId, toast])
 
-  const imageUrls = useStickerImageUrls(images)
+  const imageUrls = useStickerImageUrls(householdId, images)
 
   // Handles its own failure: callers run this AFTER a successful save, so a
   // reload hiccup must not surface as a failed save (which invites a duplicate

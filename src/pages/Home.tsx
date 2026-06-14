@@ -10,7 +10,7 @@ import {
   type BoardDisplayMode,
 } from '../lib/queries'
 import { fetchActiveChores } from '../lib/chores'
-import { fetchStickerImages } from '../lib/stickerImages'
+import { loadStickerImages } from '../lib/stickerImageCache'
 import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { useOnlineStatus } from '../hooks/useOnlineStatus'
 import {
@@ -121,7 +121,7 @@ export function Home() {
       const [choresR, tiersR, imagesR] = await Promise.allSettled([
         fetchActiveChores(myParent.household_id),
         fetchRewardTiers(myParent.household_id),
-        fetchStickerImages(myParent.household_id),
+        loadStickerImages(myParent.household_id),
       ])
       if (!isCurrent()) return
       if (choresR.status === 'fulfilled') setChores(choresR.value)
@@ -218,7 +218,7 @@ export function Home() {
     if (online) void flushQueue()
   }, [online, flushQueue])
 
-  const imageUrls = useStickerImageUrls(stickerImages)
+  const imageUrls = useStickerImageUrls(household?.id, stickerImages)
 
   const choreNames = useMemo(() => {
     const map: Record<string, string> = {}

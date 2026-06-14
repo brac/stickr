@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { fetchKids, fetchMyParent, fetchRewardTiers } from '../lib/queries'
-import { fetchStickerImages } from '../lib/stickerImages'
+import { loadStickerImages } from '../lib/stickerImageCache'
 import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
@@ -44,7 +44,7 @@ export function KidBoard() {
         const [theKids, tiers, images] = await Promise.all([
           fetchKids(myParent.household_id),
           fetchRewardTiers(myParent.household_id),
-          fetchStickerImages(myParent.household_id),
+          loadStickerImages(myParent.household_id),
         ])
         if (!active) return
         setKids(theKids)
@@ -69,7 +69,7 @@ export function KidBoard() {
     return () => document.removeEventListener('fullscreenchange', onChange)
   }, [])
 
-  const imageUrls = useStickerImageUrls(stickerImages)
+  const imageUrls = useStickerImageUrls(parent?.household_id, stickerImages)
 
   async function toggleFullscreen() {
     try {

@@ -2,11 +2,11 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import { SetupShell } from '../components/SetupShell'
 import { FullScreenSpinner } from '../components/FullScreenSpinner'
 import { useMyParent } from '../hooks/useMyParent'
+import { deleteStickerImage, uploadStickerImage } from '../lib/stickerImages'
 import {
-  deleteStickerImage,
-  fetchStickerImages,
-  uploadStickerImage,
-} from '../lib/stickerImages'
+  invalidateStickerImageRows,
+  loadStickerImages,
+} from '../lib/stickerImageCache'
 import { useStickerImageUrls } from '../hooks/useStickerImageUrls'
 import { makeStickerCutout, type StickerTreatment } from '../lib/imageProcessing'
 import { getErrorMessage } from '../lib/errors'
@@ -26,7 +26,7 @@ export function StickerLibrary() {
   const { parent, loading } = useMyParent()
   const toast = useToast()
   const [images, setImages] = useState<StickerImage[]>([])
-  const imageUrls = useStickerImageUrls(images)
+  const imageUrls = useStickerImageUrls(parent?.household_id, images)
   const [busy, setBusy] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [preview, setPreview] = useState<Preview | null>(null)
@@ -37,7 +37,7 @@ export function StickerLibrary() {
   useEffect(() => {
     if (!parent) return
     let active = true
-    fetchStickerImages(parent.household_id)
+    loadStickerImages(parent.household_id)
       .then((rows) => {
         if (active) setImages(rows)
       })
@@ -73,6 +73,9 @@ export function StickerLibrary() {
         count++
       }
       if (count > 0) {
+        // Other pages share the cached rows — drop them so they refetch the
+        // newly uploaded images instead of a stale list.
+        invalidateStickerImageRows(parent.household_id)
         toast.success(`${count} image${count === 1 ? '' : 's'} uploaded.`)
         if (fellBack > 0) {
           toast.info(
@@ -153,6 +156,7 @@ export function StickerLibrary() {
         label: 'Photo sticker',
       })
       setImages((prev) => [image, ...prev])
+      invalidateStickerImageRows(parent.household_id)
       closePreview()
       toast.success('Sticker added.')
     } catch (err) {
@@ -167,6 +171,7 @@ export function StickerLibrary() {
     try {
       await deleteStickerImage(image)
       setImages((prev) => prev.filter((i) => i.id !== image.id))
+      if (parent) invalidateStickerImageRows(parent.household_id)
       toast.success('Sticker image deleted.')
     } catch (err) {
       toast.error(getErrorMessage(err))

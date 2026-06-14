@@ -18,7 +18,7 @@ vi.mock('../lib/queries', () => ({
   awardStickers: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('../lib/chores', () => ({ fetchActiveChores: vi.fn() }))
-vi.mock('../lib/stickerImages', () => ({ fetchStickerImages: vi.fn() }))
+vi.mock('../lib/stickerImageCache', () => ({ loadStickerImages: vi.fn() }))
 vi.mock('../hooks/useStickerImageUrls', () => ({
   useStickerImageUrls: () => ({}),
 }))
@@ -50,7 +50,7 @@ import {
   type NewSticker,
 } from '../lib/queries'
 import { fetchActiveChores } from '../lib/chores'
-import { fetchStickerImages } from '../lib/stickerImages'
+import { loadStickerImages } from '../lib/stickerImageCache'
 import { getQueuedAwards, removeQueuedAwards } from '../lib/offlineQueue'
 import { reportError } from '../lib/monitoring'
 
@@ -74,7 +74,7 @@ beforeEach(() => {
   vi.mocked(fetchKids).mockResolvedValue([kid])
   vi.mocked(fetchActiveChores).mockResolvedValue([])
   vi.mocked(fetchRewardTiers).mockResolvedValue([])
-  vi.mocked(fetchStickerImages).mockResolvedValue([])
+  vi.mocked(loadStickerImages).mockResolvedValue([])
 })
 
 describe('Home load resilience', () => {

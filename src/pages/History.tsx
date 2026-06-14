@@ -6,7 +6,10 @@ import {
   fetchPastChapters,
   type PastChapter,
 } from '../lib/queries'
-import { fetchStickerImages, signStickerImageUrls } from '../lib/stickerImages'
+import {
+  getSignedStickerUrls,
+  loadStickerImages,
+} from '../lib/stickerImageCache'
 import { getErrorMessage } from '../lib/errors'
 import { useToast } from '../components/toast/useToast'
 import type { Kid, StickerEvent } from '../lib/types'
@@ -132,10 +135,10 @@ export function History() {
         if (!active || !myParent) return
         const [theKids, images] = await Promise.all([
           fetchKids(myParent.household_id),
-          fetchStickerImages(myParent.household_id),
+          loadStickerImages(myParent.household_id),
         ])
         if (!active) return
-        const map = await signStickerImageUrls(images)
+        const map = await getSignedStickerUrls(myParent.household_id, images)
         if (!active) return
         setImageUrls(map)
         setKids(theKids)
