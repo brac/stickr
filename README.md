@@ -90,17 +90,11 @@ src/
 supabase/
   migrations/   Canonical schema (apply with `supabase db push`)
   functions/    Edge Functions (send-award-push, delete-account)
-docs/           Architecture, deployment runbook, security notes, roadmap
 e2e/            Playwright specs
 ```
 
-## Documentation
-
-- [`CLAUDE.md`](CLAUDE.md) — the project bible: scope, design principles, data model.
-- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — operational runbook (Vercel + Supabase).
-- [`docs/SECURITY-RLS.md`](docs/SECURITY-RLS.md) — the row-level-security model.
-- [`docs/PROD_READY.md`](docs/PROD_READY.md) — production-readiness audit.
-- [`docs/FUTURE.md`](docs/FUTURE.md) / [`docs/NEXT_UP.md`](docs/NEXT_UP.md) — roadmap and backlog.
+For the design principles, scope, and data model, see [`CLAUDE.md`](CLAUDE.md) —
+the project bible.
 
 ## Scope
 
