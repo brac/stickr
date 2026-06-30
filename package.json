@@ -3,6 +3,13 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "description": "A household sticker reward board — two-parent PWA (Vite + React + Supabase)",
+  "license": "MIT",
+  "homepage": "https://stickr.brac.dev",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/brac/stickr.git"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

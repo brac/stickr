@@ -1,73 +1,114 @@
-# React + TypeScript + Vite
+# Stickr
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+> A household sticker reward board — the online half of a physical sticker board
+> that lives on a wall in the house.
 
-Currently, two official plugins are available:
+Stickr is a two-parent installable **PWA** for running a young child's sticker
+reward system. Tap a button when your kid does something good, watch a sticker
+appear on a virtual board, and redeem rewards at fixed thresholds. The app is
+the source of truth; the wall board is an optional, decorative mirror.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+It's a small, real app built for one household — open-sourced as a reference for
+a Vite + React + Supabase PWA with realtime sync, offline-tolerant logging, and
+row-level-security-backed multi-tenant data.
 
-## React Compiler
+## Features
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **One-tap awarding.** Logging a sticker is the hot path — one tap from the home
+  screen. Awards appear on a visual board with deterministic, seeded jitter so the
+  same event renders in the same place on every device.
+- **Two-parent realtime sync.** When one parent awards a sticker, the other
+  parent's phone reflects it within a couple of seconds (Supabase Postgres
+  changefeeds), so nobody double-logs.
+- **Rewards & chapters.** Define reward tiers at fixed thresholds; redeeming a
+  reward archives the current "chapter" and starts a fresh board. History view
+  shows past chapters as static snapshots.
+- **Custom sticker images.** Parents upload images (resized client-side, optional
+  background removal) into a household-scoped library; each chore references one.
+- **Installable & offline-tolerant.** Works as a PWA on iOS and Android; logging
+  queues offline and syncs when back online via a service worker.
+- **Optional push notifications** when the other parent awards a sticker.
 
-## Expanding the ESLint configuration
+## Tech stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+| Layer | Choice |
+|-------|--------|
+| Frontend | Vite + React 19 + TypeScript (strict), Tailwind CSS |
+| PWA | `vite-plugin-pwa` (service worker, installable, offline queue) |
+| Backend | Supabase — Postgres + Auth + Realtime + Storage |
+| Security | Row-Level Security on every table; hardened `SECURITY DEFINER` RPCs |
+| Edge Functions | `send-award-push` (web push fan-out), `delete-account` |
+| Error tracking | Sentry (no-ops unless configured) |
+| Hosting | Vercel static build + hosted Supabase |
+| Tests | Vitest (unit) + Playwright (E2E) |
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+Prerequisites: Node 20+ and a Supabase project (or the
+[Supabase CLI](https://supabase.com/docs/guides/cli) for a local stack).
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+# 1. Install dependencies
+npm install
+
+# 2. Configure environment
+cp .env.example .env.local
+#   then fill in VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY from
+#   your Supabase project (Settings → API). The anon key is public —
+#   Row-Level Security is the security boundary.
+
+# 3. Apply the database schema (against a linked Supabase project)
+supabase db push        # or `supabase db reset` for a local stack
+
+# 4. Run the dev server
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open the printed local URL. To install as a PWA, use your browser's "Install app"
+/ "Add to Home Screen" action.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+### Scripts
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+| Command | What it does |
+|---------|--------------|
+| `npm run dev` | Start the Vite dev server |
+| `npm run build` | Typecheck (`tsc -b`) + production build |
+| `npm run lint` | ESLint |
+| `npm run test` | Unit tests (Vitest) |
+| `npm run e2e` | End-to-end tests (Playwright) |
+| `npm run preview` | Preview the production build locally |
+
+## Project structure
+
 ```
+src/
+  auth/         Auth context + sign-in flow
+  components/   UI components (board, onboarding, toasts, …)
+  hooks/        React hooks (realtime subscriptions, etc.)
+  lib/          Typed Supabase client, sticker placement, helpers
+  pages/        Route-level screens
+supabase/
+  migrations/   Canonical schema (apply with `supabase db push`)
+  functions/    Edge Functions (send-award-push, delete-account)
+docs/           Architecture, deployment runbook, security notes, roadmap
+e2e/            Playwright specs
+```
+
+## Documentation
+
+- [`CLAUDE.md`](CLAUDE.md) — the project bible: scope, design principles, data model.
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) — operational runbook (Vercel + Supabase).
+- [`docs/SECURITY-RLS.md`](docs/SECURITY-RLS.md) — the row-level-security model.
+- [`docs/PROD_READY.md`](docs/PROD_READY.md) — production-readiness audit.
+- [`docs/FUTURE.md`](docs/FUTURE.md) / [`docs/NEXT_UP.md`](docs/NEXT_UP.md) — roadmap and backlog.
+
+## Scope
+
+This is a v1 household tool for **one kid, one household, two parents**. The data
+model allows for multi-kid / multi-household, but the UI intentionally doesn't
+surface them. There is **no** negative-behavior mechanic — stickers only go up or
+are redeemed. See [`CLAUDE.md`](CLAUDE.md) for the full set of constraints.
+
+## License
+
+[MIT](LICENSE) © Ben Bracamonte
